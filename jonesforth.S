@@ -235,62 +235,69 @@ defcode "/MOD",4,,DIVMOD
 @ DROP ( a -- ) drops the top element of the stack
 
 defcode "DROP",4,,DROP
-	pop r0
+	pop r0 @( )
 	NEXT
 
 @ SWAP ( a b -- b a ) swaps the two top elements
 
 defcode "SWAP",4,,SWAP
-	pop r0
-	pop r1
-	push r0
-	push r1
+	// ( a b -- )
+	pop r0	@  ( a ) , r0 = b
+	pop r1	@  (  ) , r0 = b, r1 = a
+	push r0	@  ( b  ) , r0 = b, r1 = a
+	push r1	@  ( b a  ) , r0 = b, r1 = a
 	NEXT
 
 @ DUP ( a -- a a ) duplicates the top element
 
 defcode "DUP",3,,DUP
-	pop r0
-	push r0
-	push r0
+	@ ( a -- )
+	pop r0	@ (  ) , r0 = a
+	push r0	@ ( a  ) , r0 = a
+	push r0 @ ( a a  ) , r0 = a
 	NEXT
 
 @ OVER ( a b c -- a b c b ) pushes the second element on top
 
 defcode "OVER",4,,OVER
-	ldr r0, [DSP, #4]
-	push r0
+	ldr r0, [DSP, #4] @ ( a b c) r0 = b we take the element at DSP + 4
+			  @ and since DSP is the top of the stack we will load
+			  @ the second element of the stack in r0
+	
+	push r0		  @ ( a b c b )
 	NEXT
 
 @ ROT ( a b c -- b c a) rotation
 
 defcode "ROT",3,,ROT
-	pop r0
-	pop r1
-	pop r2
-	push r1
-	push r0
-	push r2
-	NEXT
+	pop r0 @ ( a b ) r0 = c
+    	pop r1 @ ( a ) r1 = b
+    	pop r2 @ ( ) r2 = a
+    	push r1 @ ( b )
+    	push r0 @ ( b c )
+    	push r2 @ ( b c a )
+    	NEXT
 
 @ -ROT ( a b c -- c a b ) backwards rotation
 
 defcode "-ROT",4,,NROT
-	pop r0
-	pop r1
-	pop r2
-	push r0
-	push r2
-	push r1
+	pop r0 @ ( a b ) r0 = c
+	pop r1 @ ( a ) r1 = b
+	pop r2 @ ( ) r2 = a
+	push r0 @ ( c )
+	push r2 @ ( c a )
+	push r1 @ ( c a b )
 	NEXT
 
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
 
 defcode "?DUP", 4,,QDUP
-	ldr r0, [DSP]
-	cmp r0, #0
-	strne r0, [DSP, #-4]!
-	NEXT
+	@ (x --)
+	ldr r0, [DSP] @ r0 = x
+	cmp r0, #0 @ test if x==0
+	beq 1f	@ if x==0 we jump to 1
+	push r0	@ ( a a ) it's now duplicated
+	1: NEXT	@ ( a a / 0 )
 
 @ 1+ ( a | a+1 ) increments the top element
 
