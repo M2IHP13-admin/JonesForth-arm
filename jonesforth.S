@@ -233,7 +233,7 @@ defcode "/MOD",4,,DIVMOD
         NEXT
 
 @ Alternative to DIVMOD: signed implementation using Euclidean division.
-defcode "S/MOD",4,,SDIVMOD
+defcode "S/MOD",5,,SDIVMOD
 	@ Denominator
 	pop r2
 	@ Numerator
@@ -346,7 +346,7 @@ defcode "OVER",4,,OVER
 	ldr r0, [DSP, #4] @ ( a b c) r0 = b we take the element at DSP + 4
 			  @ and since DSP is the top of the stack we will load
 			  @ the second element of the stack in r0
-	
+
 	push r0		  @ ( a b c b )
 	NEXT
 
@@ -534,7 +534,7 @@ defcode "XOR",3,,XOR
 	push	r0
 	NEXT
 
-@ INVERT ( a | ~a ) bitwise not 
+@ INVERT ( a | ~a ) bitwise not
 
 defcode "INVERT",6,,INVERT
 	pop	r0
@@ -561,14 +561,14 @@ defcode "!",1,,STORE
 	str	r1, [r0]
 	NEXT
 
-@ @ ( address -- value ) reads value from address 
+@ @ ( address -- value ) reads value from address
 
 defcode "@",1,,FETCH
 	pop	r1
-	ldr	r0, [r1] 
+	ldr	r0, [r1]
 	push	r0
 	NEXT
-	
+
 @ C! and @! are the same for bytes
 
 defcode "C!",2,,STOREBYTE
