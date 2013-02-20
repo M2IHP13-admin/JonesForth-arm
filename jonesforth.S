@@ -50,20 +50,20 @@
 @ Define macros to push and pop from the data
 @ and return stacks
 
-	.macro PUSHRSP reg
-	str \reg, [RSP, #-4]!
+	.macro PUSHRSP reg	@ *push an address contained in reg in the return stack*
+	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
 	.endm
 
-	.macro POPRSP reg
-	ldr \reg, [RSP], #4
+	.macro POPRSP reg	@ *pop a address from the return stack to reg *
+	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
 	.endm
 
-	.macro push reg
-	str \reg, [DSP, #-4]!
+	.macro push reg		@ *push a data contained in reg in the data stack*
+	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
 	.endm
 
-	.macro pop reg
-	ldr \reg, [DSP], #4
+	.macro pop reg		@ *pop a data from the return stack to reg *
+	ldr \reg, [DSP], #4	@ load the top data of the stack into reg and update the stack pointer
 	.endm
 
 @ DOCOL is the assembly subroutine that is called
@@ -99,20 +99,21 @@ _start:
 	.set INITIAL_DATA_SEGMENT_SIZE,65536
 	.text
     .align 2
-set_up_data_segment:
-	mov r0, #0
-	ldr r7, =__NR_brk
-	swi 0                       @ Call brk(0) syscall to get the end
-	                            @ of the program memory segment
-                                @ (which will be the start of the data segment)
-    ldr r1, =var_HERE
-	str r0, [r1]                @ Point var_HERE to the start of the data
-                                @ segment
-	add r0, r0, #INITIAL_DATA_SEGMENT_SIZE
-	swi 0
-	bx  lr                      @ Call brk(INITIAL_DATA_SEGMENT_SIZE)
-                                @ to allocate memory for the data segment
 
+set_up_data_segment:
+
+	mov r1, #0	
+	mov r7, #__NR_brk
+	swi 0			@ Call brk(0) to get value of Program Break
+
+	ldr r1, =var_HERE	
+	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment	
+	 
+	add r0, #INITIAL_DATA_SEGMENT_SIZE
+	swi 0			@ Allocate Memory
+
+	bx	lr		@ Return
+ 
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
 
@@ -201,32 +202,35 @@ defcode "EXIT",4,,EXIT
 	NEXT
 
 @ DIVMOD computes the unsigned integer division and remainder
+@ The implementation is based upon the algorithm extracted from 'ARM Software
+@ Development Toolkit User Guide v2.50' published by ARM in 1997-1998
+@ The algorithm is split in two steps: search the biggest divisor b^(2^n)
+@ lesser than a and then subtract it and all b^(2^i) (for i from 0 to n)
+@ to a.
 @ ( a b -- r q ) where a = q * b + r
-@ Example from the ARM Software
-@ Development Toolkit User Guide 2.50.
+
 defcode "/MOD",4,,DIVMOD
+        pop     r1                      @ Get b
+        pop     r0                      @ Get a
+        mov     r3, r1                  @ Put b in tmp
 
-	pop r2 @ b
-	pop r1 @ a
+        cmp     r3, r0, LSR #1
+1:      movls   r3, r3, LSL #1          @ Double tmp 
+        cmp     r3, r0, LSR #1
+        bls     1b                      @ Jump until 2 * tmp > a
 
-   	mov	r3, r2            @ r3 = b
-	cmp	r3, r1, LSR #1
-1:	movls r3, r3, LSL #1  @ double r3
-	cmp	r3, r1, LSR #1    @ until 2*r3 > a
-	bls	1b
+        mov     r2, #0                  @ Initialize q
 
-	mov	r0, #0            @ clear q
-2:	cmp	r1, r3            @ if r3 < a
-	subcs r1, r1,r3       @ a = a - r3
-	adc	r0, r0, r0        @ double r0
-	mov	r3, r3, LSR #1    @ halve r3
-	cmp	r3, r2            @ loop until r3 < b
-	bhs	2b
+2:      cmp     r0, r3                  @ If a - tmp > 0
+        subcs   r0, r0, r3              @ a <= a - tmp
+        adc     r2, r2, r2              @ Increment q
+        mov     r3, r3, LSR #1          @ Halve tmp
+        cmp     r3, r1                  @ Jump until tmp < b
+        bhs     2b
 
-	push r1 @ remainder
-	push r0 @ division
-	NEXT
-
+        push    r0                      @ Put r
+        push    r2                      @ Put q
+        NEXT
 
 @ DROP ( a -- ) drops the top element of the stack
 
@@ -578,44 +582,52 @@ defcode "DSP!",4,,DSPSTORE
 	mov r0, DSP
 	NEXT
 
-
 @ KEY ( -- c ) Reads a key from the user
 @ the implementation uses a cached buffer that is
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-	bl _KEY
-	push r0
-	NEXT
+	
+	bl _KEY		     @ Call _KEY
+	push r0		     @ push the return value on the stack
+	NEXT			
 
 _KEY:
-	ldr r2, =currkey
-	ldr r1, [r2]          @ position of the last read key in the buffer
-	ldr r0, =bufftop
-	ldr r3, [r0]          @ buffer's limit
-	cmp r1, r3            @ are there still keys in the buffer ?
-	bge 1f                @ no, go refill
-	ldrb r0, [r1], #1     @ yes, return key and increment
-	str r1, [r2]          @ currkey
-	bx lr
-1:
-	ldr r1, =buffer
-	str r1, [r2]          @ reset currkey
-	mov r0, #stdin
-	ldr r2, =BUFFER_SIZE  @ refill buffer
-	ldr r7, =__NR_read
-	swi 0                 @ read(stdin, &buffer, BUFFER_SIZE)
-	cmp r0,#0             @ check for errors ?
-	ble 2f                @ if error, fail
-	ldr r1, =buffer
-	add r1,r1,r0
-	ldr r2, =bufftop
-	str r1, [r2]          @ update buffer limit
-	b _KEY                @ return key to user
 
-2:                        @ die if read error
-	ldr r7,=__NR_exit
+	ldr r3, =currkey     @ Load the address of currkey    	
+	ldr r1, [r3]	     @ Get the value of currkey
+	ldr r3, =bufftop     @ Load the address of bufftop 
+	ldr r2, [r3]	     @ Get the value of bufftop
+	cmp r2, r1	     	
+	ble 1f	             @ if bufftop <= currkey
+
+	ldrb r0, [r1]	     @ load the first byte of currkey
+	ldr r3, =currkey     
+	add r1, #1	     @ Increments CURRKEY
+	str r1,	[r3]	     
+
+	bx lr		     @ return
+
+1:
+	ldr r3, =currkey
+	mov r0, #0			@ 1st arg: STDIN
+	ldr r1, =buffer			@ 2nd arg : buffer add			
+	str r1, [r3]			@ CURRKEY := BUFFER
+	mov r2, #BUFFER_SIZE		@ 3rd arg : buffer sz
+	mov r7, #__NR_read		@ read syscall flag
+	swi 0				@ call
+	cmp r0, #0
+	ble 2f				@ if errors goto 2
+	add r1,r0			@ Set bufftop at the end of the word
+	ldr r4, =bufftop
+	str r1, [r4]			@ update bufftop
+	b	_KEY			
+
+2:					@ read syscall returned with an error
+	mov r0, #0
+	mov r7, #__NR_exit		@ exit(0)
 	swi 0
+	
 
 @ buffer for KEY
 
@@ -626,21 +638,24 @@ currkey:
 bufftop:
 	.int buffer
 
-
 @ EMIT ( c -- ) outputs character c to stdout
 
 defcode "EMIT",4,,EMIT
 	pop r0
-	bl _EMIT
+	bl	_EMIT
 	NEXT
+
 _EMIT:
-	ldr r1,=emit_scratch
-	strb r0, [r1]         @ write character to memory
-	mov r0,#stdout
-	mov r2,#1
-	ldr r7,=__NR_write
-	swi 0                 @ call write(stdout, &emit_scratch)
-	bx lr
+	ldr r2, =emit_scratch
+	str r0, [r2]		@ write character to memory
+	mov r1, r2		
+	mov r2, #1		@ write 1 byte
+	mov r0, #stdout		@ write on standard output
+	mov r7, #__NR_write	@ write syscall flag
+	
+	swi 0			@ write syscall	
+	bx	lr	
+
 
 	.data
 emit_scratch:
@@ -918,11 +933,12 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-	pop  r0
-	ldr r1, [r0, #4]!
-	eor r1, r1, #F_HIDDEN
-	str r1, [r0]
-	NEXT
+   pop r1		@ r1 contains the address of the word
+   add r1, r1, #4	@ r1 points to the flag
+   ldrb r2, [r1]	@ load the value of the flag into r2
+   eor r2, r2, #F_HIDDEN	@ r2 = r2 xor FLAG
+   strb r2, [r1]		@ update the new value of the flag
+   NEXT
 
 @ HIDE ( -- ) hide a word
 
@@ -943,17 +959,18 @@ defcode "'",1,,TICK
 @ BRANCH ( -- ) changes IP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-	ldr r1, [IP]
-	add IP, IP, r1
-	NEXT
+	ldr r0, [IP]		@ load the address pointed by IP
+	add IP, IP, r0		@ add to this address the number of bytes to jump, into IP
+	NEXT			@ here IP is correctly updated, we can do a NEXT
+
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-	pop	r0
-	cmp	r0, #0		 @ if the top of the stack is zero
-	beq	code_BRANCH	 @ then branch
-	add	IP, IP, #4   @ else, skip the offset
+	pop r0			@ pop top value from the data stack
+	cmp r0, #0		@ check if this value is equal to 0
+	beq code_BRANCH		@ if it's equal we jump to the branch code
+	add IP, IP, #4		@ otherwise, we skip to the next instruction
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
@@ -1091,36 +1108,41 @@ defcode "EXECUTE",7,,EXECUTE
 	bx r1
 
 @ Wrappers for doing syscalls from the forth word
+@ SYSCALLX have to be used for a syscall with X arguments
+@ In ARM, syscalls arguments must be located in r0-r2 and
+@ the syscall index is in r7.
+@ The return value is then pushed in the stack.
+@ SYSCALLX ( i [arg1 arg2 ar3] -- r )
 
 defcode "SYSCALL3",8,,SYSCALL3
-	pop r7
-	pop r0
-	pop r1
-	pop r2
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        pop     r2
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL2",8,,SYSCALL2
-	pop r7
-	pop r0
-	pop r1
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL1",8,,SYSCALL1
-	pop r7
-	pop r0
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL0",8,,SYSCALL0
-	pop r7
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        swi     0
+        push    r0
+        NEXT
 
 @ Reserve space for the return stack and the read buffer (for KEY)
 
