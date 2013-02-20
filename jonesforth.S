@@ -951,10 +951,10 @@ defcode "BRANCH",6,,BRANCH
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-	pop	r0
-	cmp	r0, #0		 @ if the top of the stack is zero
-	beq	code_BRANCH	 @ then branch
-	add	IP, IP, #4   @ else, skip the offset
+	pop r0			@ pop top value from the data stack
+	cmp r0, #0		@ check if this value is equal to 0
+	beq code_BRANCH		@ if it's equal we jump to the branch code
+	add IP, IP, #4		@ otherwise, we skip to the next instruction
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
