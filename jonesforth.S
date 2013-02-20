@@ -50,8 +50,8 @@
 @ Define macros to push and pop from the data
 @ and return stacks
 
-	.macro PUSHRSP reg
-	str \reg, [RSP, #-4]!
+	.macro PUSHRSP reg	@ *push an address contained in reg in the return stack*
+	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
 	.endm
 
 	.macro POPRSP reg
