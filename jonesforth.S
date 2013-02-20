@@ -50,20 +50,20 @@
 @ Define macros to push and pop from the data
 @ and return stacks
 
-	.macro PUSHRSP reg
-	str \reg, [RSP, #-4]!
+	.macro PUSHRSP reg	@ *push an address contained in reg in the return stack*
+	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
 	.endm
 
-	.macro POPRSP reg
-	ldr \reg, [RSP], #4
+	.macro POPRSP reg	@ *pop a address from the return stack to reg *
+	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
 	.endm
 
-	.macro push reg
-	str \reg, [DSP, #-4]!
+	.macro push reg		@ *push a data contained in reg in the data stack*
+	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
 	.endm
 
-	.macro pop reg
-	ldr \reg, [DSP], #4
+	.macro pop reg		@ *pop a data from the return stack to reg *
+	ldr \reg, [DSP], #4	@ load the top data of the stack into reg and update the stack pointer
 	.endm
 
 @ DOCOL is the assembly subroutine that is called
@@ -99,20 +99,21 @@ _start:
 	.set INITIAL_DATA_SEGMENT_SIZE,65536
 	.text
     .align 2
-set_up_data_segment:
-	mov r0, #0
-	ldr r7, =__NR_brk
-	swi 0                       @ Call brk(0) syscall to get the end
-	                            @ of the program memory segment
-                                @ (which will be the start of the data segment)
-    ldr r1, =var_HERE
-	str r0, [r1]                @ Point var_HERE to the start of the data
-                                @ segment
-	add r0, r0, #INITIAL_DATA_SEGMENT_SIZE
-	swi 0
-	bx  lr                      @ Call brk(INITIAL_DATA_SEGMENT_SIZE)
-                                @ to allocate memory for the data segment
 
+set_up_data_segment:
+
+	mov r1, #0	
+	mov r7, #__NR_brk
+	swi 0			@ Call brk(0) to get value of Program Break
+
+	ldr r1, =var_HERE	
+	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment	
+	 
+	add r0, #INITIAL_DATA_SEGMENT_SIZE
+	swi 0			@ Allocate Memory
+
+	bx	lr		@ Return
+ 
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
 
@@ -201,32 +202,35 @@ defcode "EXIT",4,,EXIT
 	NEXT
 
 @ DIVMOD computes the unsigned integer division and remainder
+@ The implementation is based upon the algorithm extracted from 'ARM Software
+@ Development Toolkit User Guide v2.50' published by ARM in 1997-1998
+@ The algorithm is split in two steps: search the biggest divisor b^(2^n)
+@ lesser than a and then subtract it and all b^(2^i) (for i from 0 to n)
+@ to a.
 @ ( a b -- r q ) where a = q * b + r
-@ Example from the ARM Software
-@ Development Toolkit User Guide 2.50.
+
 defcode "/MOD",4,,DIVMOD
+        pop     r1                      @ Get b
+        pop     r0                      @ Get a
+        mov     r3, r1                  @ Put b in tmp
 
-	pop r2 @ b
-	pop r1 @ a
+        cmp     r3, r0, LSR #1
+1:      movls   r3, r3, LSL #1          @ Double tmp 
+        cmp     r3, r0, LSR #1
+        bls     1b                      @ Jump until 2 * tmp > a
 
-   	mov	r3, r2            @ r3 = b
-	cmp	r3, r1, LSR #1
-1:	movls r3, r3, LSL #1  @ double r3
-	cmp	r3, r1, LSR #1    @ until 2*r3 > a
-	bls	1b
+        mov     r2, #0                  @ Initialize q
 
-	mov	r0, #0            @ clear q
-2:	cmp	r1, r3            @ if r3 < a
-	subcs r1, r1,r3       @ a = a - r3
-	adc	r0, r0, r0        @ double r0
-	mov	r3, r3, LSR #1    @ halve r3
-	cmp	r3, r2            @ loop until r3 < b
-	bhs	2b
+2:      cmp     r0, r3                  @ If a - tmp > 0
+        subcs   r0, r0, r3              @ a <= a - tmp
+        adc     r2, r2, r2              @ Increment q
+        mov     r3, r3, LSR #1          @ Halve tmp
+        cmp     r3, r1                  @ Jump until tmp < b
+        bhs     2b
 
-	push r1 @ remainder
-	push r0 @ division
-	NEXT
-
+        push    r0                      @ Put r
+        push    r2                      @ Put q
+        NEXT
 
 @ DROP ( a -- ) drops the top element of the stack
 
@@ -585,44 +589,52 @@ defcode "DSP!",4,,DSPSTORE
 	mov r0, DSP
 	NEXT
 
-
 @ KEY ( -- c ) Reads a key from the user
 @ the implementation uses a cached buffer that is
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-	bl _KEY
-	push r0
-	NEXT
+	
+	bl _KEY		     @ Call _KEY
+	push r0		     @ push the return value on the stack
+	NEXT			
 
 _KEY:
-	ldr r2, =currkey
-	ldr r1, [r2]          @ position of the last read key in the buffer
-	ldr r0, =bufftop
-	ldr r3, [r0]          @ buffer's limit
-	cmp r1, r3            @ are there still keys in the buffer ?
-	bge 1f                @ no, go refill
-	ldrb r0, [r1], #1     @ yes, return key and increment
-	str r1, [r2]          @ currkey
-	bx lr
-1:
-	ldr r1, =buffer
-	str r1, [r2]          @ reset currkey
-	mov r0, #stdin
-	ldr r2, =BUFFER_SIZE  @ refill buffer
-	ldr r7, =__NR_read
-	swi 0                 @ read(stdin, &buffer, BUFFER_SIZE)
-	cmp r0,#0             @ check for errors ?
-	ble 2f                @ if error, fail
-	ldr r1, =buffer
-	add r1,r1,r0
-	ldr r2, =bufftop
-	str r1, [r2]          @ update buffer limit
-	b _KEY                @ return key to user
 
-2:                        @ die if read error
-	ldr r7,=__NR_exit
+	ldr r3, =currkey     @ Load the address of currkey    	
+	ldr r1, [r3]	     @ Get the value of currkey
+	ldr r3, =bufftop     @ Load the address of bufftop 
+	ldr r2, [r3]	     @ Get the value of bufftop
+	cmp r2, r1	     	
+	ble 1f	             @ if bufftop <= currkey
+
+	ldrb r0, [r1]	     @ load the first byte of currkey
+	ldr r3, =currkey     
+	add r1, #1	     @ Increments CURRKEY
+	str r1,	[r3]	     
+
+	bx lr		     @ return
+
+1:
+	ldr r3, =currkey
+	mov r0, #0			@ 1st arg: STDIN
+	ldr r1, =buffer			@ 2nd arg : buffer add			
+	str r1, [r3]			@ CURRKEY := BUFFER
+	mov r2, #BUFFER_SIZE		@ 3rd arg : buffer sz
+	mov r7, #__NR_read		@ read syscall flag
+	swi 0				@ call
+	cmp r0, #0
+	ble 2f				@ if errors goto 2
+	add r1,r0			@ Set bufftop at the end of the word
+	ldr r4, =bufftop
+	str r1, [r4]			@ update bufftop
+	b	_KEY			
+
+2:					@ read syscall returned with an error
+	mov r0, #0
+	mov r7, #__NR_exit		@ exit(0)
 	swi 0
+	
 
 @ buffer for KEY
 
@@ -633,21 +645,24 @@ currkey:
 bufftop:
 	.int buffer
 
-
 @ EMIT ( c -- ) outputs character c to stdout
 
 defcode "EMIT",4,,EMIT
 	pop r0
-	bl _EMIT
+	bl	_EMIT
 	NEXT
+
 _EMIT:
-	ldr r1,=emit_scratch
-	strb r0, [r1]         @ write character to memory
-	mov r0,#stdout
-	mov r2,#1
-	ldr r7,=__NR_write
-	swi 0                 @ call write(stdout, &emit_scratch)
-	bx lr
+	ldr r2, =emit_scratch
+	str r0, [r2]		@ write character to memory
+	mov r1, r2		
+	mov r2, #1		@ write 1 byte
+	mov r0, #stdout		@ write on standard output
+	mov r7, #__NR_write	@ write syscall flag
+	
+	swi 0			@ write syscall	
+	bx	lr	
+
 
 	.data
 emit_scratch:
@@ -925,11 +940,12 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-	pop  r0
-	ldr r1, [r0, #4]!
-	eor r1, r1, #F_HIDDEN
-	str r1, [r0]
-	NEXT
+   pop r1		@ r1 contains the address of the word
+   add r1, r1, #4	@ r1 points to the flag
+   ldrb r2, [r1]	@ load the value of the flag into r2
+   eor r2, r2, #F_HIDDEN	@ r2 = r2 xor FLAG
+   strb r2, [r1]		@ update the new value of the flag
+   NEXT
 
 @ HIDE ( -- ) hide a word
 
@@ -950,17 +966,18 @@ defcode "'",1,,TICK
 @ BRANCH ( -- ) changes IP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-	ldr r1, [IP]
-	add IP, IP, r1
-	NEXT
+	ldr r0, [IP]		@ load the address pointed by IP
+	add IP, IP, r0		@ add to this address the number of bytes to jump, into IP
+	NEXT			@ here IP is correctly updated, we can do a NEXT
+
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-	pop	r0
-	cmp	r0, #0		 @ if the top of the stack is zero
-	beq	code_BRANCH	 @ then branch
-	add	IP, IP, #4   @ else, skip the offset
+	pop r0			@ pop top value from the data stack
+	cmp r0, #0		@ check if this value is equal to 0
+	beq code_BRANCH		@ if it's equal we jump to the branch code
+	add IP, IP, #4		@ otherwise, we skip to the next instruction
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
@@ -992,94 +1009,129 @@ defword "QUIT", 4,, QUIT
 	.int BRANCH,-8       @ loop
 
 @ INTERPRET, reads a word from stdin and executes or compiles it
-
 defcode "INTERPRET",9,,INTERPRET
-    @ No need to backup callee save registers here, since
-    @ we are the top level routine
-
-	mov r8, #0                      @ interpret_is_lit = 0
-
-	bl _WORD                        @ read a word from stdin
-	mov r4, r0                      @ store it in r4,r5
+	@ Fetch the address and length of the current word.
+	bl _WORD
+	mov r4, r0
 	mov r5, r1
 
-	bl _FIND                        @ find its dictionary entry
-	cmp r0, #0                      @ if not found go to 1
+	@ r7 will store whether the word is a literal, for the moment
+	@ we don't know.
+	mov r7, #0
+
+	@ Search word in the dictionary.
+	bl _FIND
+
+	@ Word was not found in the dictionary.
+	cmp r0, #0
 	beq 1f
 
-    @ Here the entry is found
-	ldrb r6, [r0, #4]               @ read length and flags field
-	bl   _TCFA                      @ find code field address
-	tst  r6, #F_IMMED               @ if the word is immediate
-	bne 4f                          @ branch to 6 (execute)
-	b   2f                          @ otherwise, branch to 2
+	@ Word was found. r0 is now a pointer to the corresponding
+	@ dictionary entry.
+	@ Save flag/length fields.
+	ldrb r6, [r0, #4]
 
-1:  @ Not found in dictionary
-   	mov r8, #1                      @ interpret_is_lit = 1
-	mov r0, r4                      @ restore word
+	@ Convert entry to a codeword pointer.
+	bl _TCFA
+
+	tst r6, #F_IMMED
+	@ IMMEDIATE == 0, we have to execute the word.
+	bne 4f
+	@ IMMEDIATE == 1
+	b 2f
+
+1:	@ The word was not found, is it a number?
+
+	@ Set literal flag.
+	add r7, r7, #1
+
+	@ Prepare call to _NUMBER.
+	mov r0, r4
 	mov r1, r5
-	bl _NUMBER                      @ convert it to number
-	cmp r1, #0                      @ if errors were found
-	bne 6f                          @ then fail
+	bl _NUMBER
 
-    @ it's a literal
-	mov r6, r0                      @ keep the parsed number if r6
-	ldr r0, =LIT                    @ we will compile a LIT codeword
-
-2:  @ Compiling or Executing
-	ldr r1, =var_STATE              @ Are we compiling or executing ?
-	ldr r1, [r1]
+	@ If all characters were parsed, it is a number.
 	cmp r1, #0
-	beq 4f                          @ Go to 4 if in interpret mode
+	@ If it is neither a word nor a number, it is an error.
+	bne 6f
 
-    @ Here in compile mode
+	@ Save the number.
+	mov r8, r0
+	@ Word is a literal.
+	ldr r0, =LIT
 
-	bl _COMMA                       @ Call comma to compile the codeword
-	cmp r8,#1                       @ If it's a literal, we have to compile
-	moveq r0,r6                     @ the integer ...
-	bleq _COMMA                     @ .. too
+2:	@ Check whether we are in compile or in execute mode.
+	ldr r9, =var_STATE
+	ldr r9, [r9]
+	@ STATE == 0 -> execute, STATE == 1 -> compile
+	cmp r9, #0
+	beq 4f
+
+	@ Compile mode.
+	@ Add word to the definition of the current word.
+	bl _COMMA
+
+	@ If word is not a literal, processing is over.
+	cmp r7, #0 @ interpret_is_lit == 0?
+	beq 3f
+
+	@ Otherwise, LIT is followed by a number (in r8).
+	mov r0, r8
+	bl _COMMA
+3:
 	NEXT
 
-4:  @ Executing
-	cmp r8,#1                       @ if it's a literal, branch to 5
-	beq 5f
 
-	                                @ not a literal, execute now
-	ldr r1, [r0]                    @ (it's important here that
-	bx r1                           @  IP address in r0, since DOCOL
-                                    @  assummes it)
+4:	@ Execute mode.
+	@ If it is a literal, push it on the data stack.
+	cmp r7, #0
+	bne 5f
 
-5:  @ Push literal on the stack
-	push r6
+	@ Word is not a literal,, execute it.
+	ldr r1, [r0]
+	bx r1
+
+5:	@ Executing a literal is pushing it on the data stack.
+	push r8
 	NEXT
 
-6:  @ Parse error
-	mov r0, #stderr                 @ Write an error message
-	ldr r1, =errmsg
-        mov r2, #(errmsgend-errmsg)
-	ldr r7, =__NR_write
-	swi 0
+6:	@ Error handling.
 
-	mov r0, #stderr                 @ with the word that could not be parsed
-	mov r1, r4
-	mov r2, r5
-	ldr r7, =__NR_write
-	swi 0
-
+	@ Print error message.
 	mov r0, #stderr
-	ldr r1, =errmsg2
-        mov r2, #(errmsg2end-errmsg2)
-	ldr r7, =__NR_write
+	ldr r1, =errmsg
+	mov r2, #errmsgend-errmsg
+	@ Call to write.
+	mov r7, #__NR_write
 	swi 0
 
+	@ Display the context of the error.
+	mov r0, #stderr
+	@ Compute the length of the previous buffer (currkey).
+	ldr r1, =currkey
+	ldr r1, [r1]
+	ldr r2, =buffer
+	sub r2, r1, r2
+	@ The error context must not be larger than 40 characters.
+	cmp r2, #40
+	movgt r2, #40
+	@ Pointer to the first character of the error context.
+	sub r1, r1, r2
+	mov r7, #__NR_write
+	swi 0
+
+	@ Newline.
+	mov r0, #stderr
+	ldr r1, =errmsgnl
+	mov r2, #1
+	mov r7, #__NR_write
+	swi 0
 	NEXT
 
 	.section .rodata
-errmsg: .ascii "PARSE ERROR<"
+errmsg: .ascii "PARSE ERROR: "
 errmsgend:
-
-errmsg2: .ascii ">\n"
-errmsg2end:
+errmsgnl: .ascii "\n"
 
 @ CHAR ( -- c ) put the ASCII code of the first character of the next word
 @ on the stack
@@ -1098,36 +1150,41 @@ defcode "EXECUTE",7,,EXECUTE
 	bx r1
 
 @ Wrappers for doing syscalls from the forth word
+@ SYSCALLX have to be used for a syscall with X arguments
+@ In ARM, syscalls arguments must be located in r0-r2 and
+@ the syscall index is in r7.
+@ The return value is then pushed in the stack.
+@ SYSCALLX ( i [arg1 arg2 ar3] -- r )
 
 defcode "SYSCALL3",8,,SYSCALL3
-	pop r7
-	pop r0
-	pop r1
-	pop r2
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        pop     r2
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL2",8,,SYSCALL2
-	pop r7
-	pop r0
-	pop r1
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL1",8,,SYSCALL1
-	pop r7
-	pop r0
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL0",8,,SYSCALL0
-	pop r7
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        swi     0
+        push    r0
+        NEXT
 
 @ Reserve space for the return stack and the read buffer (for KEY)
 
