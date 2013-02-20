@@ -1,5 +1,10 @@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @ Jones' Forth port for ARM EABI
+@ Copyright (C) 2013 M2IHP'13 class students, see README for 
+@ the detailed list of contributors.
+@
+@ This code is released under the GNU LGPL v 3, see LICENSE for 
+@ further details.
 @
 @ Original x86 and forth code: Richard W.M. Jones
 @ <rich@annexia.org>
@@ -9,8 +14,6 @@
 @ removed.  You should check them out, they are really
 @ detailed, well written and pedagogical.
 @
-@ Some code is borrowed from the ARM port from
-@ Peter H. Froehlich <phf@acm.org>
 @
 @ The DIVMOD routine is taken from the ARM Software
 @ Development Toolkit User Guide 2.50.
