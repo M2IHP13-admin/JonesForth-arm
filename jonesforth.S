@@ -918,11 +918,12 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-	pop  r0
-	ldr r1, [r0, #4]!
-	eor r1, r1, #F_HIDDEN
-	str r1, [r0]
-	NEXT
+   pop r1		@ r1 = &word
+   add r1, r1, #4	@ r1 = &(flag)
+   ldrb r2, [r1]	@ r2 = flag
+   eor r2, r2, #F_HIDDEN	@ r2 = r2 xor FLAG
+   strb r2, [r1]		@ store
+   NEXT
 
 @ HIDE ( -- ) hide a word
 
