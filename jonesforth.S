@@ -1,20 +1,20 @@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@ Jones' Forth port for ARM EABI  
-@ 
-@ Original x86 and forth code: Richard W.M. Jones
-@ <rich@annexia.org> 
+@ Jones' Forth port for ARM EABI
 @
-@ 
+@ Original x86 and forth code: Richard W.M. Jones
+@ <rich@annexia.org>
+@
+@
 @ The extensive comments from Jones' x86 version have been
 @ removed.  You should check them out, they are really
 @ detailed, well written and pedagogical.
-@ 
+@
 @ Some code is borrowed from the ARM port from
 @ Peter H. Froehlich <phf@acm.org>
-@ 
+@
 @ The DIVMOD routine is taken from the ARM Software
 @ Development Toolkit User Guide 2.50.
-@ 
+@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
     .set JONES_VERSION,47
@@ -23,13 +23,13 @@
 @ Reserve three special registers:
 @ DSP (r13) points to the top of the data stack
 @ RSP (r11) points to the top of the return stack
-@ IP (r10) points to the next forth word that will be executed 
+@ IP (r10) points to the next forth word that will be executed
 
     #define DSP r13
     #define RSP r11
     #define IP r10
 
-@ Define stdin, stdout, stderr file descriptors numbers  
+@ Define stdin, stdout, stderr file descriptors numbers
 
 	.set stdin, 0
 	.set stdout, 1
@@ -47,8 +47,8 @@
 	bx r1
 	.endm
 
-@ Define macros to push and pop from the data 
-@ and return stacks  
+@ Define macros to push and pop from the data
+@ and return stacks
 
 	.macro PUSHRSP reg
 	str \reg, [RSP, #-4]!
@@ -66,7 +66,7 @@
 	ldr \reg, [DSP], #4
 	.endm
 
-@ DOCOL is the assembly subroutine that is called 
+@ DOCOL is the assembly subroutine that is called
 @ at the start of every forth word execution.
 @ It saves the old IP on the return stack, and
 @ makes IP point to the first codeword.
@@ -85,29 +85,29 @@ DOCOL:
     .align 2
 	.global _start
 _start:
-	ldr r0, =var_S0              
+	ldr r0, =var_S0
 	str DSP, [r0]               @ Save the original stack position in var_S0
-	ldr RSP, =return_stack_top  @ Set the initial return stack position  
+	ldr RSP, =return_stack_top  @ Set the initial return stack position
 	bl  set_up_data_segment     @ Set up the data segment
-	ldr IP, =cold_start         @ Make the IP point to cold_start 
-	NEXT                        @ Start the interpreter 
+	ldr IP, =cold_start         @ Make the IP point to cold_start
+	NEXT                        @ Start the interpreter
 
 
 @ Allocate a data segment to define new words and data
-@ structures 
+@ structures
 
 	.set INITIAL_DATA_SEGMENT_SIZE,65536
 	.text
     .align 2
 set_up_data_segment:
-	mov r0, #0                               
-	ldr r7, =__NR_brk            
+	mov r0, #0
+	ldr r7, =__NR_brk
 	swi 0                       @ Call brk(0) syscall to get the end
 	                            @ of the program memory segment
                                 @ (which will be the start of the data segment)
-    ldr r1, =var_HERE 
-	str r0, [r1]                @ Point var_HERE to the start of the data 
-                                @ segment 
+    ldr r1, =var_HERE
+	str r0, [r1]                @ Point var_HERE to the start of the data
+                                @ segment
 	add r0, r0, #INITIAL_DATA_SEGMENT_SIZE
 	swi 0
 	bx  lr                      @ Call brk(INITIAL_DATA_SEGMENT_SIZE)
@@ -115,7 +115,7 @@ set_up_data_segment:
 
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
- 
+
 	.section .rodata
 cold_start:
 	.int QUIT
@@ -132,7 +132,7 @@ cold_start:
 @ link is used to chain the words in the dictionary as they are defined
 	.set link,0
 
-@ defword macro helps defining new forth words in assembly 
+@ defword macro helps defining new forth words in assembly
 
 	.macro defword name, namelen, flags=0, label
 	.section .rodata
@@ -150,7 +150,7 @@ name_\label :
 	// list of word pointers follow
 	.endm
 
-@ defcode macro helps defining new native words in assembly 
+@ defcode macro helps defining new native words in assembly
 
 	.macro defcode name, namelen, flags=0, label
 	.section .rodata
@@ -170,7 +170,7 @@ name_\label :
 code_\label :			// assembler code follows
 	.endm
 
-@ defvar macro helps defining Forth variables in assembly 
+@ defvar macro helps defining Forth variables in assembly
 
 	.macro defvar name, namelen, flags=0, label, initial=0
 	defcode \name,\namelen,\flags,\label
@@ -201,7 +201,7 @@ defcode "EXIT",4,,EXIT
 	NEXT
 
 @ DIVMOD computes the unsigned integer division and remainder
-@ ( a b -- r q ) where a = q * b + r 
+@ ( a b -- r q ) where a = q * b + r
 @ Example from the ARM Software
 @ Development Toolkit User Guide 2.50.
 defcode "/MOD",4,,DIVMOD
@@ -209,17 +209,17 @@ defcode "/MOD",4,,DIVMOD
 	pop r2 @ b
 	pop r1 @ a
 
-   	mov	r3, r2            @ r3 = b 
-	cmp	r3, r1, LSR #1     
+   	mov	r3, r2            @ r3 = b
+	cmp	r3, r1, LSR #1
 1:	movls r3, r3, LSL #1  @ double r3
-	cmp	r3, r1, LSR #1    @ until 2*r3 > a 
-	bls	1b          
-    
+	cmp	r3, r1, LSR #1    @ until 2*r3 > a
+	bls	1b
+
 	mov	r0, #0            @ clear q
-2:	cmp	r1, r3            @ if r3 < a  
-	subcs r1, r1,r3       @ a = a - r3 
+2:	cmp	r1, r3            @ if r3 < a
+	subcs r1, r1,r3       @ a = a - r3
 	adc	r0, r0, r0        @ double r0
-	mov	r3, r3, LSR #1    @ halve r3 
+	mov	r3, r3, LSR #1    @ halve r3
 	cmp	r3, r2            @ loop until r3 < b
 	bhs	2b
 
@@ -228,13 +228,13 @@ defcode "/MOD",4,,DIVMOD
 	NEXT
 
 
-@ DROP ( a -- ) drops the top element of the stack 
+@ DROP ( a -- ) drops the top element of the stack
 
 defcode "DROP",4,,DROP
 	pop r0
 	NEXT
 
-@ SWAP ( a b -- b a ) swaps the two top elements 
+@ SWAP ( a b -- b a ) swaps the two top elements
 
 defcode "SWAP",4,,SWAP
 	pop r0
@@ -280,7 +280,7 @@ defcode "-ROT",4,,NROT
 	push r1
 	NEXT
 
-@ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero  
+@ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
 
 defcode "?DUP", 4,,QDUP
 	ldr r0, [DSP]
@@ -288,7 +288,7 @@ defcode "?DUP", 4,,QDUP
 	strne r0, [DSP, #-4]!
 	NEXT
 
-@ 1+ ( a | a+1 ) increments the top element 
+@ 1+ ( a | a+1 ) increments the top element
 
 defcode "1+",2,,INCR
 	pop r0
@@ -296,7 +296,7 @@ defcode "1+",2,,INCR
 	push r0
 	NEXT
 
-@ 1- ( a | a-1 ) decrements the top element 
+@ 1- ( a | a-1 ) decrements the top element
 
 defcode "1-",2,,DECR
 	pop r0
@@ -304,7 +304,7 @@ defcode "1-",2,,DECR
 	push r0
 	NEXT
 
-@ 4+ ( a | a+4 ) increments by 4 the top element 
+@ 4+ ( a | a+4 ) increments by 4 the top element
 
 defcode "4+",2,,INCR4
 	pop r0
@@ -312,7 +312,7 @@ defcode "4+",2,,INCR4
 	push r0
 	NEXT
 
-@ 4- ( a | a-4 ) decrements by 4 the top element 
+@ 4- ( a | a-4 ) decrements by 4 the top element
 
 defcode "4-",2,,DECR4
 	pop r0
@@ -347,7 +347,7 @@ defcode "*",1,,MUL
 	push r2
 	NEXT
 
-@ = ( a b | p ) where p is 1 when a and b are equal (0 otherwise) 
+@ = ( a b | p ) where p is 1 when a and b are equal (0 otherwise)
 
 defcode "=",1,,EQU
 	pop	r1
@@ -358,7 +358,7 @@ defcode "=",1,,EQU
 	push	r0
 	NEXT
 
-@ <> ( a b | p) where p = a <> b 
+@ <> ( a b | p) where p = a <> b
 
 defcode "<>",2,,NEQU
 	pop	r1
@@ -369,7 +369,7 @@ defcode "<>",2,,NEQU
 	push	r0
 	NEXT
 
-@ < ( a b | p) where p = a < b 
+@ < ( a b | p) where p = a < b
 
 defcode "<",1,,LT
 	pop	r1
@@ -380,7 +380,7 @@ defcode "<",1,,LT
 	push	r0
 	NEXT
 
-@ < ( a b | p) where p = a < b 
+@ < ( a b | p) where p = a < b
 
 defcode ">",1,,GT
 	pop	r1
@@ -391,7 +391,7 @@ defcode ">",1,,GT
 	push	r0
 	NEXT
 
-@ <= ( a b | p) where p = a <= b 
+@ <= ( a b | p) where p = a <= b
 
 defcode "<=",2,,LE
 	pop	r1
@@ -402,7 +402,7 @@ defcode "<=",2,,LE
 	push	r0
 	NEXT
 
-@ >= ( a b | p) where p = a >= b 
+@ >= ( a b | p) where p = a >= b
 
 defcode ">=",2,,GE
 	pop	r1
@@ -413,7 +413,7 @@ defcode ">=",2,,GE
 	push	r0
 	NEXT
 
-@ AND ( a b | a&b) bitwise and 
+@ AND ( a b | a&b) bitwise and
 
 defcode "AND",3,,AND
 	pop	r0
@@ -422,7 +422,7 @@ defcode "AND",3,,AND
 	push	r0
 	NEXT
 
-@ OR ( a b | a|b) bitwise or 
+@ OR ( a b | a|b) bitwise or
 
 defcode "OR",2,,OR
 	pop	r0
@@ -431,7 +431,7 @@ defcode "OR",2,,OR
 	push	r0
 	NEXT
 
-@ XOR ( a b | a^b) bitwise xor 
+@ XOR ( a b | a^b) bitwise xor
 
 defcode "XOR",3,,XOR
 	pop	r0
@@ -440,7 +440,7 @@ defcode "XOR",3,,XOR
 	push	r0
 	NEXT
 
-@ INVERT ( a | ~a ) bitwise not 
+@ INVERT ( a | ~a ) bitwise not
 
 defcode "INVERT",6,,INVERT
     pop r0
@@ -450,14 +450,14 @@ defcode "INVERT",6,,INVERT
 
 @ LIT is used to compile literals in forth word.
 @ When LIT is executed it pushes the literal (which is the next codeword)
-@ into the stack and skips it (since the literal is not executable). 
+@ into the stack and skips it (since the literal is not executable).
 
 defcode "LIT", 3,, LIT
 	ldr r1, [IP], #4
 	push r1
 	NEXT
 
-@ ! ( value address -- ) write value at address 
+@ ! ( value address -- ) write value at address
 
 defcode "!",1,,STORE
 	pop r0
@@ -465,7 +465,7 @@ defcode "!",1,,STORE
 	str r1, [r0]
 	NEXT
 
-@ @ ( address -- value ) reads value from address 
+@ @ ( address -- value ) reads value from address
 
 defcode "@",1,,FETCH
 	pop r0
@@ -492,15 +492,15 @@ defcode "C@",2,,FETCHBYTE
 @ address to dest address
 
 defcode "CMOVE",5,,CMOVE
-	pop	r0		
-	pop	r1		
-	pop	r2		
-1:	
+	pop	r0
+	pop	r1
+	pop	r2
+1:
     cmp r0, #0           @ while length > 0
 	ldrgtb r3, [r2], #1  @ read character from source
 	strgtb r3, [r1], #1  @ and write it to dest (and increment both pointers)
-	subgt r0, r0, #1     @ decrement length 
-	bgt	1b         
+	subgt r0, r0, #1     @ decrement length
+	bgt	1b
 	NEXT
 
 
@@ -569,8 +569,8 @@ defcode "RSP!",4,,RSPSTORE
 	NEXT
 
 defcode "DSP@",4,,DSPFETCH
-	mov r0, DSP  
-	push r0     
+	mov r0, DSP
+	push r0
 	NEXT
 
 defcode "DSP!",4,,DSPSTORE
@@ -589,28 +589,28 @@ defcode "KEY",3,,KEY
 	NEXT
 
 _KEY:
-	ldr r2, =currkey    
+	ldr r2, =currkey
 	ldr r1, [r2]          @ position of the last read key in the buffer
-	ldr r0, =bufftop  
-	ldr r3, [r0]          @ buffer's limit 
+	ldr r0, =bufftop
+	ldr r3, [r0]          @ buffer's limit
 	cmp r1, r3            @ are there still keys in the buffer ?
 	bge 1f                @ no, go refill
-	ldrb r0, [r1], #1     @ yes, return key and increment 
+	ldrb r0, [r1], #1     @ yes, return key and increment
 	str r1, [r2]          @ currkey
 	bx lr
 1:
 	ldr r1, =buffer
-	str r1, [r2]          @ reset currkey 
-	mov r0, #stdin    
+	str r1, [r2]          @ reset currkey
+	mov r0, #stdin
 	ldr r2, =BUFFER_SIZE  @ refill buffer
-	ldr r7, =__NR_read    
-	swi 0                 @ read(stdin, &buffer, BUFFER_SIZE) 
+	ldr r7, =__NR_read
+	swi 0                 @ read(stdin, &buffer, BUFFER_SIZE)
 	cmp r0,#0             @ check for errors ?
 	ble 2f                @ if error, fail
-	ldr r1, =buffer       
-	add r1,r1,r0 
-	ldr r2, =bufftop       
-	str r1, [r2]          @ update buffer limit 
+	ldr r1, =buffer
+	add r1,r1,r0
+	ldr r2, =bufftop
+	str r1, [r2]          @ update buffer limit
 	b _KEY                @ return key to user
 
 2:                        @ die if read error
@@ -634,11 +634,11 @@ defcode "EMIT",4,,EMIT
 	bl _EMIT
 	NEXT
 _EMIT:
-	ldr r1,=emit_scratch  
-	strb r0, [r1]         @ write character to memory 
+	ldr r1,=emit_scratch
+	strb r0, [r1]         @ write character to memory
 	mov r0,#stdout
 	mov r2,#1
-	ldr r7,=__NR_write    
+	ldr r7,=__NR_write
 	swi 0                 @ call write(stdout, &emit_scratch)
 	bx lr
 
@@ -658,13 +658,13 @@ defcode "WORD",4,,WORD
 _WORD:
 	stmfd	sp!, {r6,lr}   @ preserve r6 and lr
 1:
-	bl	_KEY               @ read a character 
-	cmp	r0, #'\\'          
+	bl	_KEY               @ read a character
+	cmp	r0, #'\\'
 	beq	3f                 @ skip comments until end of line
 	cmp	r0, #' '
 	ble	1b                 @ skip blank character
 
-	ldr	r6, =word_buffer   
+	ldr	r6, =word_buffer
 2:
 	strb	r0, [r6], #1   @ store character in word buffer
 	bl	_KEY               @ read more characters until a space is found
@@ -675,7 +675,7 @@ _WORD:
 	sub	r1, r6, r0         @ r1, length of word
 
 	ldmfd	sp!, {r6,lr}   @ restore r6 and lr
-	bx	lr                 
+	bx	lr
 3:
 	bl	_KEY               @ skip all characters until end of line
 	cmp	r0, #'\n'
@@ -688,9 +688,9 @@ _WORD:
 word_buffer:
 	.space 32
 
-@ NUMBER ( addr length -- n e ) converts string to number 
+@ NUMBER ( addr length -- n e ) converts string to number
 @ n is the parsed number
-@ e is the number of unparsed characters 
+@ e is the number of unparsed characters
 @ Borrowed from the port of Peter H. Froehlich <phf@acm.org>
 
 defcode "NUMBER",6,,NUMBER
@@ -724,7 +724,7 @@ _NUMBER:
 	b	5f		         @ error!
 1:
 	mul	r8, r0, r5	     @ number = number * BASE
-	mov	r0, r8		     @ (need to use another register for mul to avoid 
+	mov	r0, r8		     @ (need to use another register for mul to avoid
                          @  warning)
 	ldrb	r6, [r2], #1 @ get character and increment address
 2:
@@ -751,9 +751,9 @@ _NUMBER:
 	bx	lr
 
 
-@ FIND ( addr length -- dictionary_address ) 
+@ FIND ( addr length -- dictionary_address )
 @ Tries to find a word in the dictionary and returns its address.
-@ If the word is not found, NULL is returned. 
+@ If the word is not found, NULL is returned.
 
 defcode "FIND",4,,FIND
     pop r1 @length
@@ -763,30 +763,30 @@ defcode "FIND",4,,FIND
 	NEXT
 
 _FIND:
-	stmfd	sp!, {r5,r6,r8,r9}        @ save callee save registers 
-	ldr r2, =var_LATEST               
+	stmfd	sp!, {r5,r6,r8,r9}        @ save callee save registers
+	ldr r2, =var_LATEST
 	ldr r3, [r2]                      @ get the last defined word address
 1:
-	cmp r3, #0                        @ did we check all the words ? 
+	cmp r3, #0                        @ did we check all the words ?
 	beq 4f                            @ then exit
 
 	ldrb r2, [r3, #4]                 @ read the length field
 	and r2, r2, #(F_HIDDEN|F_LENMASK) @ keep only length + hidden bits
-	cmp r2, r1                        @ do the lengths match ? 
+	cmp r2, r1                        @ do the lengths match ?
 	                                  @ (note that if a word is hidden,
                                       @  the test will be always negative)
-    bne 3f                            @ branch if they do not match 
+    bne 3f                            @ branch if they do not match
 
-	                                  @ Now we compare strings characters 
-	mov r5, r0                        @ r5 contains searched string 
-	mov r6, r3                        @ r6 contains dict string 
+	                                  @ Now we compare strings characters
+	mov r5, r0                        @ r5 contains searched string
+	mov r6, r3                        @ r6 contains dict string
 	add r6, r6, #5                    @ (we skip link and length fields)
                                       @ r2 contains the length
 
 2:
 	ldrb r8, [r5], #1                 @ compare character per character
-	ldrb r9, [r6], #1                 
-	cmp r8,r9                         
+	ldrb r9, [r6], #1
+	cmp r8,r9
 	bne 3f                            @ if they do not match, branch to 3
 	subs r2,r2,#1                     @ decrement length
 	bne 2b                            @ loop
@@ -802,8 +802,8 @@ _FIND:
 	ldmfd	sp!, {r5,r6,r8,r9}        @ restore callee save registers
 	bx lr
 
-@ >CFA ( dictionary_address -- executable_address ) 
-@ Transformat a dictionary address into a code field address 
+@ >CFA ( dictionary_address -- executable_address )
+@ Transformat a dictionary address into a code field address
 
 defcode ">CFA",4,,TCFA
 	pop r0
@@ -811,20 +811,20 @@ defcode ">CFA",4,,TCFA
 	push r0
 	NEXT
 _TCFA:
-	add r0,r0,#4         @ skip link field	
+	add r0,r0,#4         @ skip link field
 	ldrb r1, [r0], #1    @ load and skip the length field
 	and r1,r1,#F_LENMASK @ keep only the length
-	add r0,r0,r1         @ skip the name field 
-	add r0,r0,#3         @ find the next 4-byte boundary 
+	add r0,r0,r1         @ skip the name field
+	add r0,r0,#3         @ find the next 4-byte boundary
 	and r0,r0,#~3
 	bx lr
 
-@ >DFA ( dictionary_address -- data_field_address ) 
-@ Return the address of the first data field 
+@ >DFA ( dictionary_address -- data_field_address )
+@ Return the address of the first data field
 
 defword ">DFA",4,,TDFA
-	.int TCFA  
-	.int INCR4 
+	.int TCFA
+	.int INCR4
 	.int EXIT
 
 
@@ -835,26 +835,26 @@ defcode "CREATE",6,,CREATE
 	pop r1             @ length
 	pop r0             @ addr
 
-	ldr r2,=var_HERE    
-	ldr r2,[r2]         @ load HERE address  
-	ldr r3,=var_LATEST  
+	ldr r2,=var_HERE
+	ldr r2,[r2]         @ load HERE address
+	ldr r3,=var_LATEST
 	ldr r3,[r3]         @ load LATEST address
 	str r3,[r2],#4      @ create the link field
 	strb r1,[r2],#1     @ create the length field
 
 1:  ldrb r3, [r0], #1   @ copy the word name
-	strb r3, [r2], #1   
+	strb r3, [r2], #1
 	sub r1, r1, #1      @ decrement length
-	cmp r1, #0        
-	bgt 1b              @ loop 
+	cmp r1, #0
+	bgt 1b              @ loop
 
 	add r2,r2,#3        @ pad to the next 4-byte boundary
-	and r2,r2,#~3 
+	and r2,r2,#~3
 
-	ldr r0, =var_HERE   
+	ldr r0, =var_HERE
 	ldr r3, [r0]
 	ldr r1, =var_LATEST @ update LATEST
-	str r3, [r1]        @ LATEST <- old HERE 
+	str r3, [r1]        @ LATEST <- old HERE
 	str r2, [r0]        @ update HERE
 	NEXT
 
@@ -865,7 +865,7 @@ defcode ",",1,,COMMA
 	bl _COMMA
 	NEXT
 _COMMA:
-	ldr	r1, =var_HERE   
+	ldr	r1, =var_HERE
 	ldr	r2, [r1]       @ read HERE
 	str	r0, [r2], #4   @ write value and increment address
 	str	r2, [r1]       @ update HERE
@@ -893,14 +893,14 @@ defword ":",1,,COLON
 	.int WORD		           @ Get the name of the new word
 	.int CREATE		           @ CREATE the dictionary entry / header
 	.int LIT, DOCOL, COMMA	   @ Append DOCOL  (the codeword).
-	.int LATEST, FETCH, HIDDEN @ Make the word hidden 
+	.int LATEST, FETCH, HIDDEN @ Make the word hidden
                                @ (see below for definition).
 	.int RBRAC		           @ Go into compile mode.
 	.int EXIT		           @ Return from the function.
 
 defword ";",1,F_IMMED,SEMICOLON
 	.int LIT, EXIT, COMMA	   @ Append EXIT (so the word will return).
-	.int LATEST, FETCH, HIDDEN @ Toggle hidden flag -- unhide the word 
+	.int LATEST, FETCH, HIDDEN @ Toggle hidden flag -- unhide the word
                                @ (see below for definition).
 	.int LBRAC		           @ Go back to IMMEDIATE mode.
 	.int EXIT		           @ Return from the function.
@@ -910,7 +910,7 @@ defword ";",1,F_IMMED,SEMICOLON
 defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 	ldr r0, =var_LATEST     @ find last defined word
 	ldr r2, [r0]
-	ldrb r1, [r2, #4]!      @ read length and flags field 
+	ldrb r1, [r2, #4]!      @ read length and flags field
 	eor r1, r1, #F_IMMED    @ set F_IMMED bit
 	strb r1, [r2]           @ update the field
 	NEXT
@@ -918,7 +918,7 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-	pop  r0		
+	pop  r0
 	ldr r1, [r0, #4]!
 	eor r1, r1, #F_HIDDEN
 	str r1, [r0]
@@ -933,7 +933,7 @@ defword "HIDE",4,,HIDE
 	.int EXIT	        	@ Return.
 
 @ TICK ( -- ) returns the codeword address of next read word
-@ only works in compile mode. Implementation is identical to LIT. 
+@ only works in compile mode. Implementation is identical to LIT.
 
 defcode "'",1,,TICK
 	ldr r1, [IP], #4
@@ -947,27 +947,27 @@ defcode "BRANCH",6,,BRANCH
 	add IP, IP, r1
 	NEXT
 
-@ 0BRANCH ( p -- ) branch if the top of the stack is zero 
+@ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
 	pop	r0
-	cmp	r0, #0		 @ if the top of the stack is zero 
-	beq	code_BRANCH	 @ then branch 
-	add	IP, IP, #4   @ else, skip the offset	
+	cmp	r0, #0		 @ if the top of the stack is zero
+	beq	code_BRANCH	 @ then branch
+	add	IP, IP, #4   @ else, skip the offset
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
 
 defcode "LITSTRING",9,,LITSTRING
-	ldr	r0, [IP], #4  @ read length	
-	push	IP	      @ push address	
-	push	r0	      @ push string	
-	add	IP, IP, r0    @ skip the string	
+	ldr	r0, [IP], #4  @ read length
+	push	IP	      @ push address
+	push	r0	      @ push string
+	add	IP, IP, r0    @ skip the string
 	add	IP, IP, #3	  @ find the next 4-byte boundary
 	and	IP, IP, #~3
 	NEXT
 
-@ TELL ( addr length -- ) writes a string to stdout 
+@ TELL ( addr length -- ) writes a string to stdout
 
 defcode "TELL",4,,TELL
 	mov r0, #stdout
@@ -980,7 +980,7 @@ defcode "TELL",4,,TELL
 @ QUIT ( -- ) the first word to be executed
 
 defword "QUIT", 4,, QUIT
-	.int RZ, RSPSTORE    @ Set up return stack 
+	.int RZ, RSPSTORE    @ Set up return stack
 	.int INTERPRET       @ Interpret a word
 	.int BRANCH,-8       @ loop
 
@@ -990,7 +990,7 @@ defcode "INTERPRET",9,,INTERPRET
     @ No need to backup callee save registers here, since
     @ we are the top level routine
 
-	mov r8, #0                      @ interpret_is_lit = 0 
+	mov r8, #0                      @ interpret_is_lit = 0
 
 	bl _WORD                        @ read a word from stdin
 	mov r4, r0                      @ store it in r4,r5
@@ -1000,14 +1000,14 @@ defcode "INTERPRET",9,,INTERPRET
 	cmp r0, #0                      @ if not found go to 1
 	beq 1f
 
-    @ Here the entry is found 
-	ldrb r6, [r0, #4]               @ read length and flags field 
+    @ Here the entry is found
+	ldrb r6, [r0, #4]               @ read length and flags field
 	bl   _TCFA                      @ find code field address
 	tst  r6, #F_IMMED               @ if the word is immediate
-	bne 4f                          @ branch to 6 (execute) 
-	b   2f                          @ otherwise, branch to 2 
+	bne 4f                          @ branch to 6 (execute)
+	b   2f                          @ otherwise, branch to 2
 
-1:  @ Not found in dictionary 
+1:  @ Not found in dictionary
    	mov r8, #1                      @ interpret_is_lit = 1
 	mov r0, r4                      @ restore word
 	mov r1, r5
@@ -1016,13 +1016,13 @@ defcode "INTERPRET",9,,INTERPRET
 	bne 6f                          @ then fail
 
     @ it's a literal
-	mov r6, r0                      @ keep the parsed number if r6 
-	ldr r0, =LIT                    @ we will compile a LIT codeword 
+	mov r6, r0                      @ keep the parsed number if r6
+	ldr r0, =LIT                    @ we will compile a LIT codeword
 
-2:  @ Compiling or Executing 
+2:  @ Compiling or Executing
 	ldr r1, =var_STATE              @ Are we compiling or executing ?
-	ldr r1, [r1]                   
-	cmp r1, #0                      
+	ldr r1, [r1]
+	cmp r1, #0
 	beq 4f                          @ Go to 4 if in interpret mode
 
     @ Here in compile mode
@@ -1031,18 +1031,18 @@ defcode "INTERPRET",9,,INTERPRET
 	cmp r8,#1                       @ If it's a literal, we have to compile
 	moveq r0,r6                     @ the integer ...
 	bleq _COMMA                     @ .. too
-	NEXT                           
+	NEXT
 
 4:  @ Executing
 	cmp r8,#1                       @ if it's a literal, branch to 5
-	beq 5f    
+	beq 5f
 
 	                                @ not a literal, execute now
 	ldr r1, [r0]                    @ (it's important here that
-	bx r1                           @  IP address in r0, since DOCOL 
+	bx r1                           @  IP address in r0, since DOCOL
                                     @  assummes it)
 
-5:  @ Push literal on the stack 
+5:  @ Push literal on the stack
 	push r6
 	NEXT
 
@@ -1083,7 +1083,7 @@ defcode "CHAR",4,,CHAR
 	push r1
 	NEXT
 
-@ EXECUTE ( xt -- ) jump to the address on the stack  
+@ EXECUTE ( xt -- ) jump to the address on the stack
 
 defcode "EXECUTE",7,,EXECUTE
 	pop r0
@@ -1122,7 +1122,7 @@ defcode "SYSCALL0",8,,SYSCALL0
 	push r0
 	NEXT
 
-@ Reserve space for the return stack and the read buffer (for KEY)    
+@ Reserve space for the return stack and the read buffer (for KEY)
 
 	.bss
 
