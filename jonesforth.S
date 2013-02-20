@@ -50,20 +50,20 @@
 @ Define macros to push and pop from the data
 @ and return stacks
 
-	.macro PUSHRSP reg	@ *push an address contained in reg in the return stack*
-	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
+	.macro PUSHRSP reg
+	str \reg, [RSP, #-4]!
 	.endm
 
-	.macro POPRSP reg	@ *pop a address from the return stack to reg *
-	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
+	.macro POPRSP reg
+	ldr \reg, [RSP], #4
 	.endm
 
-	.macro push reg		@ *push a data contained in reg in the data stack*
-	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
+	.macro push reg
+	str \reg, [DSP, #-4]!
 	.endm
 
-	.macro pop reg		@ *pop a data from the return stack to reg *
-	ldr \reg, [DSP], #4	@ load the top data of the stack into reg and update the stack pointer
+	.macro pop reg
+	ldr \reg, [DSP], #4
 	.endm
 
 @ DOCOL is the assembly subroutine that is called
@@ -102,18 +102,18 @@ _start:
 
 set_up_data_segment:
 
-	mov r1, #0	
+	mov r1, #0
 	mov r7, #__NR_brk
 	swi 0			@ Call brk(0) to get value of Program Break
 
-	ldr r1, =var_HERE	
-	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment	
-	 
+	ldr r1, =var_HERE
+	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment
+
 	add r0, #INITIAL_DATA_SEGMENT_SIZE
 	swi 0			@ Allocate Memory
 
 	bx	lr		@ Return
- 
+
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
 
@@ -215,7 +215,7 @@ defcode "/MOD",4,,DIVMOD
         mov     r3, r1                  @ Put b in tmp
 
         cmp     r3, r0, LSR #1
-1:      movls   r3, r3, LSL #1          @ Double tmp 
+1:      movls   r3, r3, LSL #1          @ Double tmp
         cmp     r3, r0, LSR #1
         bls     1b                      @ Jump until 2 * tmp > a
 
@@ -232,65 +232,155 @@ defcode "/MOD",4,,DIVMOD
         push    r2                      @ Put q
         NEXT
 
+@ Alternative to DIVMOD: signed implementation using Euclidean division.
+defcode "S/MOD",4,,SDIVMOD
+	@ Denominator
+	pop r2
+	@ Numerator
+	pop r1
+
+	bl _DIVMOD
+
+	@ Remainder
+	push r1
+	@ Quotient
+	push r0
+
+	NEXT
+
+_DIVMOD:
+	@ Division by 0.
+	cmp r2, #0
+	beq 4f
+
+	@ r0 will store the quotient at the end.
+	mov r0, #0
+
+	@ r3 will be 1 if numerator and denominator have the same
+	@ sign, -1 otherwise.
+	@ r4 will be 1 if the numerator is positive, -1 otherwise.
+	mov r3, #1
+	mov r4, #1
+
+	rsblt r3, r3, #0 @ r3 = -r3 if negative denominator
+	rsblt r2, r2, #0 @ denominator = abs(denominator)
+
+	cmp r1, #0
+	rsblt r4, r4, #0 @ r4 = sign(numerator)
+	rsblt r3, r3, #0 @ r3 = -r3 if negative numerator
+	rsblt r1, r1, #0 @ numerator = abs(numerator)
+
+	cmp r3, #-1
+	beq 2f
+
+1:	@ Case where denominator and numerator have the same sign.
+	cmp r1, r2
+	blt 3f
+	11:
+	add r0, r0, #1
+	sub r1, r1, r2
+	cmp r1, r2
+	bge 11b
+
+	b 3f
+
+2:	@ Case where denominator and numerator have different sign.
+	cmp r1, #0
+	beq 3f
+	21:
+	sub r0, r0, #1
+	sub r1, r1, r2
+	cmp r1, #0
+	bgt 21b
+
+3:
+	@ If numerator and denominator were negative:
+	@ remainder = -remainder
+	cmp r4, #-1
+	rsbeq r1, r1, #0
+	b 5f
+
+4:	@ Error, division by 0.
+	# Display error message on stderr.
+	mov r0, #stderr
+	ldr r1, =div0msg
+	mov r2, #div0msgend-div0msg
+	mov r7, #__NR_write
+	swi 0
+
+5:
+	bx lr
+
+.section .rodata
+div0msg: .ascii "Division by 0!\n"
+div0msgend:
+
 @ DROP ( a -- ) drops the top element of the stack
 
 defcode "DROP",4,,DROP
-	pop r0
+	pop r0 @( )
 	NEXT
 
 @ SWAP ( a b -- b a ) swaps the two top elements
 
 defcode "SWAP",4,,SWAP
-	pop r0
-	pop r1
-	push r0
-	push r1
+	// ( a b -- )
+	pop r0	@  ( a ) , r0 = b
+	pop r1	@  (  ) , r0 = b, r1 = a
+	push r0	@  ( b  ) , r0 = b, r1 = a
+	push r1	@  ( b a  ) , r0 = b, r1 = a
 	NEXT
 
 @ DUP ( a -- a a ) duplicates the top element
 
 defcode "DUP",3,,DUP
-	pop r0
-	push r0
-	push r0
+	@ ( a -- )
+	pop r0	@ (  ) , r0 = a
+	push r0	@ ( a  ) , r0 = a
+	push r0 @ ( a a  ) , r0 = a
 	NEXT
 
 @ OVER ( a b c -- a b c b ) pushes the second element on top
 
 defcode "OVER",4,,OVER
-	ldr r0, [DSP, #4]
-	push r0
+	ldr r0, [DSP, #4] @ ( a b c) r0 = b we take the element at DSP + 4
+			  @ and since DSP is the top of the stack we will load
+			  @ the second element of the stack in r0
+	
+	push r0		  @ ( a b c b )
 	NEXT
 
 @ ROT ( a b c -- b c a) rotation
 
 defcode "ROT",3,,ROT
-	pop r0
-	pop r1
-	pop r2
-	push r1
-	push r0
-	push r2
-	NEXT
+	pop r0 @ ( a b ) r0 = c
+    	pop r1 @ ( a ) r1 = b
+    	pop r2 @ ( ) r2 = a
+    	push r1 @ ( b )
+    	push r0 @ ( b c )
+    	push r2 @ ( b c a )
+    	NEXT
 
 @ -ROT ( a b c -- c a b ) backwards rotation
 
 defcode "-ROT",4,,NROT
-	pop r0
-	pop r1
-	pop r2
-	push r0
-	push r2
-	push r1
+	pop r0 @ ( a b ) r0 = c
+	pop r1 @ ( a ) r1 = b
+	pop r2 @ ( ) r2 = a
+	push r0 @ ( c )
+	push r2 @ ( c a )
+	push r1 @ ( c a b )
 	NEXT
 
 @ ?DUP ( 0 -- 0 | a -- a a ) duplicates if non-zero
 
 defcode "?DUP", 4,,QDUP
-	ldr r0, [DSP]
-	cmp r0, #0
-	strne r0, [DSP, #-4]!
-	NEXT
+	@ (x --)
+	ldr r0, [DSP] @ r0 = x
+	cmp r0, #0 @ test if x==0
+	beq 1f	@ if x==0 we jump to 1
+	push r0	@ ( a a ) it's now duplicated
+	1: NEXT	@ ( a a / 0 )
 
 @ 1+ ( a | a+1 ) increments the top element
 
@@ -444,13 +534,15 @@ defcode "XOR",3,,XOR
 	push	r0
 	NEXT
 
-@ INVERT ( a | ~a ) bitwise not
+@ INVERT ( a | ~a ) bitwise not 
 
 defcode "INVERT",6,,INVERT
-    pop r0
+	pop	r0
 	mvn	r0, r0
-    push r0
-	NEXT
+	push	r0
+  	NEXT
+
+
 
 @ LIT is used to compile literals in forth word.
 @ When LIT is executed it pushes the literal (which is the next codeword)
@@ -464,33 +556,36 @@ defcode "LIT", 3,, LIT
 @ ! ( value address -- ) write value at address
 
 defcode "!",1,,STORE
-	pop r0
-	pop r1
-	str r1, [r0]
+	pop	r0
+	pop	r1
+	str	r1, [r0]
 	NEXT
 
-@ @ ( address -- value ) reads value from address
+@ @ ( address -- value ) reads value from address 
 
 defcode "@",1,,FETCH
-	pop r0
-	ldr r1, [r0]
-	push r1
+	pop	r1
+	ldr	r0, [r1] 
+	push	r0
 	NEXT
-
+	
 @ C! and @! are the same for bytes
 
 defcode "C!",2,,STOREBYTE
-	pop r0
-	pop r1
-	strb r1, [r0]
+	pop	r0
+	pop	r1
+	strb	r1, [r0]
 	NEXT
 
+
 defcode "C@",2,,FETCHBYTE
-	pop r0
-	mov r1,#0
-	ldrb r1,[r0]
-	push r1
+	pop	r0
+	mov	r1, #0
+	ldrb	r1, [r0]
+	push	r1
 	NEXT
+
+
 
 @ CMOVE ( source dest length -- ) copies a chunk of length bytes from source
 @ address to dest address
@@ -587,31 +682,31 @@ defcode "DSP!",4,,DSPSTORE
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-	
+
 	bl _KEY		     @ Call _KEY
 	push r0		     @ push the return value on the stack
-	NEXT			
+	NEXT
 
 _KEY:
 
-	ldr r3, =currkey     @ Load the address of currkey    	
+	ldr r3, =currkey     @ Load the address of currkey
 	ldr r1, [r3]	     @ Get the value of currkey
-	ldr r3, =bufftop     @ Load the address of bufftop 
+	ldr r3, =bufftop     @ Load the address of bufftop
 	ldr r2, [r3]	     @ Get the value of bufftop
-	cmp r2, r1	     	
+	cmp r2, r1
 	ble 1f	             @ if bufftop <= currkey
 
 	ldrb r0, [r1]	     @ load the first byte of currkey
-	ldr r3, =currkey     
+	ldr r3, =currkey
 	add r1, #1	     @ Increments CURRKEY
-	str r1,	[r3]	     
+	str r1,	[r3]
 
 	bx lr		     @ return
 
 1:
 	ldr r3, =currkey
 	mov r0, #0			@ 1st arg: STDIN
-	ldr r1, =buffer			@ 2nd arg : buffer add			
+	ldr r1, =buffer			@ 2nd arg : buffer add
 	str r1, [r3]			@ CURRKEY := BUFFER
 	mov r2, #BUFFER_SIZE		@ 3rd arg : buffer sz
 	mov r7, #__NR_read		@ read syscall flag
@@ -621,13 +716,13 @@ _KEY:
 	add r1,r0			@ Set bufftop at the end of the word
 	ldr r4, =bufftop
 	str r1, [r4]			@ update bufftop
-	b	_KEY			
+	b	_KEY
 
 2:					@ read syscall returned with an error
 	mov r0, #0
 	mov r7, #__NR_exit		@ exit(0)
 	swi 0
-	
+
 
 @ buffer for KEY
 
@@ -648,13 +743,13 @@ defcode "EMIT",4,,EMIT
 _EMIT:
 	ldr r2, =emit_scratch
 	str r0, [r2]		@ write character to memory
-	mov r1, r2		
+	mov r1, r2
 	mov r2, #1		@ write 1 byte
 	mov r0, #stdout		@ write on standard output
 	mov r7, #__NR_write	@ write syscall flag
-	
-	swi 0			@ write syscall	
-	bx	lr	
+
+	swi 0			@ write syscall
+	bx	lr
 
 
 	.data
@@ -937,12 +1032,11 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-   pop r1		@ r1 contains the address of the word
-   add r1, r1, #4	@ r1 points to the flag
-   ldrb r2, [r1]	@ load the value of the flag into r2
-   eor r2, r2, #F_HIDDEN	@ r2 = r2 xor FLAG
-   strb r2, [r1]		@ update the new value of the flag
-   NEXT
+	pop  r0
+	ldr r1, [r0, #4]!
+	eor r1, r1, #F_HIDDEN
+	str r1, [r0]
+	NEXT
 
 @ HIDE ( -- ) hide a word
 
@@ -963,18 +1057,17 @@ defcode "'",1,,TICK
 @ BRANCH ( -- ) changes IP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-	ldr r0, [IP]		@ load the address pointed by IP
-	add IP, IP, r0		@ add to this address the number of bytes to jump, into IP
-	NEXT			@ here IP is correctly updated, we can do a NEXT
-
+	ldr r1, [IP]
+	add IP, IP, r1
+	NEXT
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-	pop r0			@ pop top value from the data stack
-	cmp r0, #0		@ check if this value is equal to 0
-	beq code_BRANCH		@ if it's equal we jump to the branch code
-	add IP, IP, #4		@ otherwise, we skip to the next instruction
+	pop	r0
+	cmp	r0, #0		 @ if the top of the stack is zero
+	beq	code_BRANCH	 @ then branch
+	add	IP, IP, #4   @ else, skip the offset
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
