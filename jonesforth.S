@@ -940,33 +940,51 @@ defword ">DFA",4,,TDFA
 
 @ CREATE ( address length -- ) Creates a new dictionary entry
 @ in the data segment.
+@ CREATE ( address length -- ) Creates a new dictionary entry
+@ in the data segment.
 
 defcode "CREATE",6,,CREATE
-	pop r1             @ length
-	pop r0             @ addr
 
-	ldr r2,=var_HERE
-	ldr r2,[r2]         @ load HERE address
-	ldr r3,=var_LATEST
-	ldr r3,[r3]         @ load LATEST address
-	str r3,[r2],#4      @ create the link field
-	strb r1,[r2],#1     @ create the length field
+        pop r1                  @ lenght of the word to insert into the dictionnary
+        pop r0                  @ address of the word to insert into the dictionnary
 
-1:  ldrb r3, [r0], #1   @ copy the word name
-	strb r3, [r2], #1
-	sub r1, r1, #1      @ decrement length
-	cmp r1, #0
-	bgt 1b              @ loop
+        ldr r2,=var_HERE        
+        ldr r3,[r2]             @ load into r3 and r8 the location of the header 
+        mov r8,r3               
 
-	add r2,r2,#3        @ pad to the next 4-byte boundary
-	and r2,r2,#~3
+        ldr r4,=var_LATEST      
+        ldr r5,[r4]             @ load into r5 the link pointer
 
-	ldr r0, =var_HERE
-	ldr r3, [r0]
-	ldr r1, =var_LATEST @ update LATEST
-	str r3, [r1]        @ LATEST <- old HERE
-	str r2, [r0]        @ update HERE
-	NEXT
+        str r5,[r3]             @ store link here -> last
+
+        add r3,r3,#4            @ skip link adress
+        strb r1,[r3]            @ store the lenght of the word
+        add r3,r3,#1            @ skip the lenght adress
+
+        mov r7,#0               @ initialize the incrementation
+
+1:
+        cmp r7,r1               @ if the word is completley read
+        beq 2f
+
+        ldrb r6,[r0,r7]         @ read and store a caracter 
+        strb r6,[r3,r7]
+
+        add r7,r7,#1            @ ready to rad the next caracter
+
+        b 1b
+
+2:
+     
+        add r3,r3,r7            @ skip the word
+
+        add r3,r3,#3            @ align to next 4 byte boundary
+        and r3,r3,#~3
+
+        str r8,[r4]             @ update LATEST and HERE
+        str r3,[r2] 
+
+        NEXT  
 
 @ , ( n -- ) writes the top element from the stack at HERE
 
@@ -1018,11 +1036,15 @@ defword ";",1,F_IMMED,SEMICOLON
 @ IMMEDIATE ( -- ) sets IMMEDIATE flag of last defined word
 
 defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
-	ldr r0, =var_LATEST     @ find last defined word
-	ldr r2, [r0]
-	ldrb r1, [r2, #4]!      @ read length and flags field
-	eor r1, r1, #F_IMMED    @ set F_IMMED bit
-	strb r1, [r2]           @ update the field
+	ldr r0, =var_LATEST	@ 
+	ldr r1, [r0]		@ get the Last word
+	add r1, r1, #4		@ points to the flag byte
+				@
+	mov r2, #0		@
+	ldrb r2, [r1]		@ load the flag into r2
+				@
+	eor r2, r2, #F_IMMED	@ r2 = r2 xor F_IMMED
+	strb r2, [r1]		@ update the flag
 	NEXT
 
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
