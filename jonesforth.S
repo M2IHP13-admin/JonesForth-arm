@@ -1,24 +1,33 @@
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@ Jones' Forth port for ARM EABI
-@ Copyright (C) 2013 M2IHP'13 class students, see README for 
-@ the detailed list of contributors.
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@ Copyright (C) 2013 M2IHP'13 class students, 
+@ see AUTHORS file for further details.
 @
-@ This code is released under the GNU LGPL v 3, see LICENSE for 
-@ further details.
+@ This program is free software: you can redistribute it and/or modify
+@ it under the terms of the GNU Lesser General Public License as published by
+@ the Free Software Foundation, either version 3 of the License, or
+@ (at your option) any later version.
+@ 
+@ This program is distributed in the hope that it will be useful,
+@ but WITHOUT ANY WARRANTY; without even the implied warranty of
+@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+@ GNU Lesser General Public License for more details.
+@ 
+@ You should have received a copy of the GNU Lesser General Public License
+@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@ Jones' Forth port for ARM EABI
 @
 @ Original x86 and forth code: Richard W.M. Jones
 @ <rich@annexia.org>
-@
 @
 @ The extensive comments from Jones' x86 version have been
 @ removed.  You should check them out, they are really
 @ detailed, well written and pedagogical.
 @
-@
 @ The DIVMOD routine is taken from the ARM Software
 @ Development Toolkit User Guide 2.50.
-@
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
     .set JONES_VERSION,47
     #include <asm/unistd.h>

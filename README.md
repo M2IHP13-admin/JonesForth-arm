@@ -4,13 +4,6 @@ http://annexia.org/forth
 
 --------------------------------------------------------------------------------
 
-Contributors: ABECASSIS Felix, BISPO VIEIRA Ricardo, BLANC Benjamin,
-BORDESSOULES Arthur, BOUDJEMAI Yassine, BRICAGE Marie, ETSCHMANN Marc, GAYE
-Ndeye Aram, GONCALVES Thomas, GOUGEAUD Sebastien, HAINE Christopher, OLIVEIRA
-Pablo, PLAZA ONATE Florian, POPOV Mihail
-
---------------------------------------------------------------------------------
-
 Jonesforth-ARM is a Forth interpreter developed for ARM.
 
 Another project porting Jonesforth on ARM is currently going by phf at
