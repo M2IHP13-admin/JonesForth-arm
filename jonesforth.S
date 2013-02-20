@@ -923,11 +923,15 @@ defword ";",1,F_IMMED,SEMICOLON
 @ IMMEDIATE ( -- ) sets IMMEDIATE flag of last defined word
 
 defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
-	ldr r0, =var_LATEST     @ find last defined word
-	ldr r2, [r0]
-	ldrb r1, [r2, #4]!      @ read length and flags field
-	eor r1, r1, #F_IMMED    @ set F_IMMED bit
-	strb r1, [r2]           @ update the field
+	ldr r0, =var_LATEST	@ 
+	ldr r1, [r0]		@ get the Last word
+	add r1, r1, #4		@ points to the flag byte
+				@
+	mov r2, #0		@
+	ldrb r2, [r1]		@ load the flag into r2
+				@
+	eor r2, r2, #F_IMMED	@ r2 = r2 xor F_IMMED
+	strb r2, [r1]		@ update the flag
 	NEXT
 
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
