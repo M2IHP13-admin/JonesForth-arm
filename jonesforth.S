@@ -943,9 +943,10 @@ defcode "'",1,,TICK
 @ BRANCH ( -- ) changes IP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-	ldr r1, [IP]
-	add IP, IP, r1
-	NEXT
+	ldr r0, [IP]		@ load the address pointed by IP
+	add IP, IP, r0		@ add to this address the number of bytes to jump, into IP
+	NEXT			@ here IP is correctly updated, we can do a NEXT
+
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
