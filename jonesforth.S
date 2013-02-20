@@ -102,18 +102,18 @@ _start:
 
 set_up_data_segment:
 
-	mov r1, #0	
+	mov r1, #0
 	mov r7, #__NR_brk
 	swi 0			@ Call brk(0) to get value of Program Break
 
-	ldr r1, =var_HERE	
-	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment	
-	 
+	ldr r1, =var_HERE
+	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment
+
 	add r0, #INITIAL_DATA_SEGMENT_SIZE
 	swi 0			@ Allocate Memory
 
 	bx	lr		@ Return
- 
+
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
 
@@ -215,7 +215,7 @@ defcode "/MOD",4,,DIVMOD
         mov     r3, r1                  @ Put b in tmp
 
         cmp     r3, r0, LSR #1
-1:      movls   r3, r3, LSL #1          @ Double tmp 
+1:      movls   r3, r3, LSL #1          @ Double tmp
         cmp     r3, r0, LSR #1
         bls     1b                      @ Jump until 2 * tmp > a
 
@@ -231,6 +231,89 @@ defcode "/MOD",4,,DIVMOD
         push    r0                      @ Put r
         push    r2                      @ Put q
         NEXT
+
+@ Alternative to DIVMOD: signed implementation using Euclidean division.
+defcode "S/MOD",4,,SDIVMOD
+	@ Denominator
+	pop r2
+	@ Numerator
+	pop r1
+
+	bl _DIVMOD
+
+	@ Remainder
+	push r1
+	@ Quotient
+	push r0
+
+	NEXT
+
+_DIVMOD:
+	@ Division by 0.
+	cmp r2, #0
+	beq 4f
+
+	@ r0 will store the quotient at the end.
+	mov r0, #0
+
+	@ r3 will be 1 if numerator and denominator have the same
+	@ sign, -1 otherwise.
+	@ r4 will be 1 if the numerator is positive, -1 otherwise.
+	mov r3, #1
+	mov r4, #1
+
+	rsblt r3, r3, #0 @ r3 = -r3 if negative denominator
+	rsblt r2, r2, #0 @ denominator = abs(denominator)
+
+	cmp r1, #0
+	rsblt r4, r4, #0 @ r4 = sign(numerator)
+	rsblt r3, r3, #0 @ r3 = -r3 if negative numerator
+	rsblt r1, r1, #0 @ numerator = abs(numerator)
+
+	cmp r3, #-1
+	beq 2f
+
+1:	@ Case where denominator and numerator have the same sign.
+	cmp r1, r2
+	blt 3f
+	11:
+	add r0, r0, #1
+	sub r1, r1, r2
+	cmp r1, r2
+	bge 11b
+
+	b 3f
+
+2:	@ Case where denominator and numerator have different sign.
+	cmp r1, #0
+	beq 3f
+	21:
+	sub r0, r0, #1
+	sub r1, r1, r2
+	cmp r1, #0
+	bgt 21b
+
+3:
+	@ If numerator and denominator were negative:
+	@ remainder = -remainder
+	cmp r4, #-1
+	rsbeq r1, r1, #0
+	b 5f
+
+4:	@ Error, division by 0.
+	# Display error message on stderr.
+	mov r0, #stderr
+	ldr r1, =div0msg
+	mov r2, #div0msgend-div0msg
+	mov r7, #__NR_write
+	swi 0
+
+5:
+	bx lr
+
+.section .rodata
+div0msg: .ascii "Division by 0!\n"
+div0msgend:
 
 @ DROP ( a -- ) drops the top element of the stack
 
@@ -599,31 +682,31 @@ defcode "DSP!",4,,DSPSTORE
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-	
+
 	bl _KEY		     @ Call _KEY
 	push r0		     @ push the return value on the stack
-	NEXT			
+	NEXT
 
 _KEY:
 
-	ldr r3, =currkey     @ Load the address of currkey    	
+	ldr r3, =currkey     @ Load the address of currkey
 	ldr r1, [r3]	     @ Get the value of currkey
-	ldr r3, =bufftop     @ Load the address of bufftop 
+	ldr r3, =bufftop     @ Load the address of bufftop
 	ldr r2, [r3]	     @ Get the value of bufftop
-	cmp r2, r1	     	
+	cmp r2, r1
 	ble 1f	             @ if bufftop <= currkey
 
 	ldrb r0, [r1]	     @ load the first byte of currkey
-	ldr r3, =currkey     
+	ldr r3, =currkey
 	add r1, #1	     @ Increments CURRKEY
-	str r1,	[r3]	     
+	str r1,	[r3]
 
 	bx lr		     @ return
 
 1:
 	ldr r3, =currkey
 	mov r0, #0			@ 1st arg: STDIN
-	ldr r1, =buffer			@ 2nd arg : buffer add			
+	ldr r1, =buffer			@ 2nd arg : buffer add
 	str r1, [r3]			@ CURRKEY := BUFFER
 	mov r2, #BUFFER_SIZE		@ 3rd arg : buffer sz
 	mov r7, #__NR_read		@ read syscall flag
@@ -633,13 +716,13 @@ _KEY:
 	add r1,r0			@ Set bufftop at the end of the word
 	ldr r4, =bufftop
 	str r1, [r4]			@ update bufftop
-	b	_KEY			
+	b	_KEY
 
 2:					@ read syscall returned with an error
 	mov r0, #0
 	mov r7, #__NR_exit		@ exit(0)
 	swi 0
-	
+
 
 @ buffer for KEY
 
@@ -660,13 +743,13 @@ defcode "EMIT",4,,EMIT
 _EMIT:
 	ldr r2, =emit_scratch
 	str r0, [r2]		@ write character to memory
-	mov r1, r2		
+	mov r1, r2
 	mov r2, #1		@ write 1 byte
 	mov r0, #stdout		@ write on standard output
 	mov r7, #__NR_write	@ write syscall flag
-	
-	swi 0			@ write syscall	
-	bx	lr	
+
+	swi 0			@ write syscall
+	bx	lr
 
 
 	.data
