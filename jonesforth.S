@@ -58,8 +58,8 @@
 	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
 	.endm
 
-	.macro push reg
-	str \reg, [DSP, #-4]!
+	.macro push reg		@ *push a data contained in reg in the data stack*
+	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
 	.endm
 
 	.macro pop reg
