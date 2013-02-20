@@ -4,7 +4,6 @@
 @ Original x86 and forth code: Richard W.M. Jones
 @ <rich@annexia.org> 
 @
-@ Port to ARM: Pablo Oliveira <pablo@sifflez.org>
 @ 
 @ The extensive comments from Jones' x86 version have been
 @ removed.  You should check them out, they are really
@@ -16,10 +15,6 @@
 @ The DIVMOD routine is taken from the ARM Software
 @ Development Toolkit User Guide 2.50.
 @ 
-@ This version passes all the tests from the original Jones'
-@ x86 version, except the inline assembly tests. The inline
-@ assembly part of jonesforth.f is x86 specific and was not
-@ ported.
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
     .set JONES_VERSION,47
