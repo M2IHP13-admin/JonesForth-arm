@@ -54,8 +54,8 @@
 	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
 	.endm
 
-	.macro POPRSP reg
-	ldr \reg, [RSP], #4
+	.macro POPRSP reg	@ *pop a address from the return stack to reg *
+	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
 	.endm
 
 	.macro push reg
