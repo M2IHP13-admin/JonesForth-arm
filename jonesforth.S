@@ -99,20 +99,21 @@ _start:
 	.set INITIAL_DATA_SEGMENT_SIZE,65536
 	.text
     .align 2
-set_up_data_segment:
-	mov r0, #0
-	ldr r7, =__NR_brk
-	swi 0                       @ Call brk(0) syscall to get the end
-	                            @ of the program memory segment
-                                @ (which will be the start of the data segment)
-    ldr r1, =var_HERE
-	str r0, [r1]                @ Point var_HERE to the start of the data
-                                @ segment
-	add r0, r0, #INITIAL_DATA_SEGMENT_SIZE
-	swi 0
-	bx  lr                      @ Call brk(INITIAL_DATA_SEGMENT_SIZE)
-                                @ to allocate memory for the data segment
 
+set_up_data_segment:
+
+	mov r1, #0	
+	mov r7, #__NR_brk
+	swi 0			@ Call brk(0) to get value of Program Break
+
+	ldr r1, =var_HERE	
+	str r0, [r1]		@ Initialize HERE to point at the beginning of data segment	
+	 
+	add r0, #INITIAL_DATA_SEGMENT_SIZE
+	swi 0			@ Allocate Memory
+
+	bx	lr		@ Return
+ 
 @ cold_start is used to bootstrap the interpreter, the first word executed
 @ is QUIT
 
@@ -578,44 +579,52 @@ defcode "DSP!",4,,DSPSTORE
 	mov r0, DSP
 	NEXT
 
-
 @ KEY ( -- c ) Reads a key from the user
 @ the implementation uses a cached buffer that is
 @ refilled, when empty, with a read syscall.
 
 defcode "KEY",3,,KEY
-	bl _KEY
-	push r0
-	NEXT
+	
+	bl _KEY		     @ Call _KEY
+	push r0		     @ push the return value on the stack
+	NEXT			
 
 _KEY:
-	ldr r2, =currkey
-	ldr r1, [r2]          @ position of the last read key in the buffer
-	ldr r0, =bufftop
-	ldr r3, [r0]          @ buffer's limit
-	cmp r1, r3            @ are there still keys in the buffer ?
-	bge 1f                @ no, go refill
-	ldrb r0, [r1], #1     @ yes, return key and increment
-	str r1, [r2]          @ currkey
-	bx lr
-1:
-	ldr r1, =buffer
-	str r1, [r2]          @ reset currkey
-	mov r0, #stdin
-	ldr r2, =BUFFER_SIZE  @ refill buffer
-	ldr r7, =__NR_read
-	swi 0                 @ read(stdin, &buffer, BUFFER_SIZE)
-	cmp r0,#0             @ check for errors ?
-	ble 2f                @ if error, fail
-	ldr r1, =buffer
-	add r1,r1,r0
-	ldr r2, =bufftop
-	str r1, [r2]          @ update buffer limit
-	b _KEY                @ return key to user
 
-2:                        @ die if read error
-	ldr r7,=__NR_exit
+	ldr r3, =currkey     @ Load the address of currkey    	
+	ldr r1, [r3]	     @ Get the value of currkey
+	ldr r3, =bufftop     @ Load the address of bufftop 
+	ldr r2, [r3]	     @ Get the value of bufftop
+	cmp r2, r1	     	
+	ble 1f	             @ if bufftop <= currkey
+
+	ldrb r0, [r1]	     @ load the first byte of currkey
+	ldr r3, =currkey     
+	add r1, #1	     @ Increments CURRKEY
+	str r1,	[r3]	     
+
+	bx lr		     @ return
+
+1:
+	ldr r3, =currkey
+	mov r0, #0			@ 1st arg: STDIN
+	ldr r1, =buffer			@ 2nd arg : buffer add			
+	str r1, [r3]			@ CURRKEY := BUFFER
+	mov r2, #BUFFER_SIZE		@ 3rd arg : buffer sz
+	mov r7, #__NR_read		@ read syscall flag
+	swi 0				@ call
+	cmp r0, #0
+	ble 2f				@ if errors goto 2
+	add r1,r0			@ Set bufftop at the end of the word
+	ldr r4, =bufftop
+	str r1, [r4]			@ update bufftop
+	b	_KEY			
+
+2:					@ read syscall returned with an error
+	mov r0, #0
+	mov r7, #__NR_exit		@ exit(0)
 	swi 0
+	
 
 @ buffer for KEY
 
@@ -626,21 +635,24 @@ currkey:
 bufftop:
 	.int buffer
 
-
 @ EMIT ( c -- ) outputs character c to stdout
 
 defcode "EMIT",4,,EMIT
 	pop r0
-	bl _EMIT
+	bl	_EMIT
 	NEXT
+
 _EMIT:
-	ldr r1,=emit_scratch
-	strb r0, [r1]         @ write character to memory
-	mov r0,#stdout
-	mov r2,#1
-	ldr r7,=__NR_write
-	swi 0                 @ call write(stdout, &emit_scratch)
-	bx lr
+	ldr r2, =emit_scratch
+	str r0, [r2]		@ write character to memory
+	mov r1, r2		
+	mov r2, #1		@ write 1 byte
+	mov r0, #stdout		@ write on standard output
+	mov r7, #__NR_write	@ write syscall flag
+	
+	swi 0			@ write syscall	
+	bx	lr	
+
 
 	.data
 emit_scratch:
