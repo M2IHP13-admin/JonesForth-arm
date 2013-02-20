@@ -201,32 +201,35 @@ defcode "EXIT",4,,EXIT
 	NEXT
 
 @ DIVMOD computes the unsigned integer division and remainder
+@ The implementation is based upon the algorithm extracted from 'ARM Software
+@ Development Toolkit User Guide v2.50' published by ARM in 1997-1998
+@ The algorithm is split in two steps: search the biggest divisor b^(2^n)
+@ lesser than a and then subtract it and all b^(2^i) (for i from 0 to n)
+@ to a.
 @ ( a b -- r q ) where a = q * b + r
-@ Example from the ARM Software
-@ Development Toolkit User Guide 2.50.
+
 defcode "/MOD",4,,DIVMOD
+        pop     r1                      @ Get b
+        pop     r0                      @ Get a
+        mov     r3, r1                  @ Put b in tmp
 
-	pop r2 @ b
-	pop r1 @ a
+        cmp     r3, r0, LSR #1
+1:      movls   r3, r3, LSL #1          @ Double tmp 
+        cmp     r3, r0, LSR #1
+        bls     1b                      @ Jump until 2 * tmp > a
 
-   	mov	r3, r2            @ r3 = b
-	cmp	r3, r1, LSR #1
-1:	movls r3, r3, LSL #1  @ double r3
-	cmp	r3, r1, LSR #1    @ until 2*r3 > a
-	bls	1b
+        mov     r2, #0                  @ Initialize q
 
-	mov	r0, #0            @ clear q
-2:	cmp	r1, r3            @ if r3 < a
-	subcs r1, r1,r3       @ a = a - r3
-	adc	r0, r0, r0        @ double r0
-	mov	r3, r3, LSR #1    @ halve r3
-	cmp	r3, r2            @ loop until r3 < b
-	bhs	2b
+2:      cmp     r0, r3                  @ If a - tmp > 0
+        subcs   r0, r0, r3              @ a <= a - tmp
+        adc     r2, r2, r2              @ Increment q
+        mov     r3, r3, LSR #1          @ Halve tmp
+        cmp     r3, r1                  @ Jump until tmp < b
+        bhs     2b
 
-	push r1 @ remainder
-	push r0 @ division
-	NEXT
-
+        push    r0                      @ Put r
+        push    r2                      @ Put q
+        NEXT
 
 @ DROP ( a -- ) drops the top element of the stack
 
@@ -1091,36 +1094,41 @@ defcode "EXECUTE",7,,EXECUTE
 	bx r1
 
 @ Wrappers for doing syscalls from the forth word
+@ SYSCALLX have to be used for a syscall with X arguments
+@ In ARM, syscalls arguments must be located in r0-r2 and
+@ the syscall index is in r7.
+@ The return value is then pushed in the stack.
+@ SYSCALLX ( i [arg1 arg2 ar3] -- r )
 
 defcode "SYSCALL3",8,,SYSCALL3
-	pop r7
-	pop r0
-	pop r1
-	pop r2
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        pop     r2
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL2",8,,SYSCALL2
-	pop r7
-	pop r0
-	pop r1
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        pop     r1
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL1",8,,SYSCALL1
-	pop r7
-	pop r0
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        pop     r0
+        swi     0
+        push    r0
+        NEXT
 
 defcode "SYSCALL0",8,,SYSCALL0
-	pop r7
-	swi 0
-	push r0
-	NEXT
+        pop     r7
+        swi     0
+        push    r0
+        NEXT
 
 @ Reserve space for the return stack and the read buffer (for KEY)
 
