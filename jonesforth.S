@@ -62,8 +62,8 @@
 	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
 	.endm
 
-	.macro pop reg
-	ldr \reg, [DSP], #4
+	.macro pop reg		@ *pop a data from the return stack to reg *
+	ldr \reg, [DSP], #4	@ load the top data of the stack into reg and update the stack pointer
 	.endm
 
 @ DOCOL is the assembly subroutine that is called
