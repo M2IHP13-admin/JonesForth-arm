@@ -50,20 +50,20 @@
 @ Define macros to push and pop from the data
 @ and return stacks
 
-	.macro PUSHRSP reg	@ *push an address contained in reg in the return stack*
-	str \reg, [RSP, #-4]!	@ update the stack pointer and store the address
+	.macro PUSHRSP reg
+	str \reg, [RSP, #-4]!
 	.endm
 
-	.macro POPRSP reg	@ *pop a address from the return stack to reg *
-	ldr \reg, [RSP], #4	@ load the top address of the stack into reg and update the stack pointer
+	.macro POPRSP reg
+	ldr \reg, [RSP], #4
 	.endm
 
-	.macro push reg		@ *push a data contained in reg in the data stack*
-	str \reg, [DSP, #-4]!	@ update the stack pointer and store the data
+	.macro push reg
+	str \reg, [DSP, #-4]!
 	.endm
 
-	.macro pop reg		@ *pop a data from the return stack to reg *
-	ldr \reg, [DSP], #4	@ load the top data of the stack into reg and update the stack pointer
+	.macro pop reg
+	ldr \reg, [DSP], #4
 	.endm
 
 @ DOCOL is the assembly subroutine that is called
@@ -444,13 +444,15 @@ defcode "XOR",3,,XOR
 	push	r0
 	NEXT
 
-@ INVERT ( a | ~a ) bitwise not
+@ INVERT ( a | ~a ) bitwise not 
 
 defcode "INVERT",6,,INVERT
-    pop r0
+	pop	r0
 	mvn	r0, r0
-    push r0
-	NEXT
+	push	r0
+  	NEXT
+
+
 
 @ LIT is used to compile literals in forth word.
 @ When LIT is executed it pushes the literal (which is the next codeword)
@@ -464,33 +466,36 @@ defcode "LIT", 3,, LIT
 @ ! ( value address -- ) write value at address
 
 defcode "!",1,,STORE
-	pop r0
-	pop r1
-	str r1, [r0]
+	pop	r0
+	pop	r1
+	str	r1, [r0]
 	NEXT
 
-@ @ ( address -- value ) reads value from address
+@ @ ( address -- value ) reads value from address 
 
 defcode "@",1,,FETCH
-	pop r0
-	ldr r1, [r0]
-	push r1
+	pop	r1
+	ldr	r0, [r1] 
+	push	r0
 	NEXT
-
+	
 @ C! and @! are the same for bytes
 
 defcode "C!",2,,STOREBYTE
-	pop r0
-	pop r1
-	strb r1, [r0]
+	pop	r0
+	pop	r1
+	strb	r1, [r0]
 	NEXT
 
+
 defcode "C@",2,,FETCHBYTE
-	pop r0
-	mov r1,#0
-	ldrb r1,[r0]
-	push r1
+	pop	r0
+	mov	r1, #0
+	ldrb	r1, [r0]
+	push	r1
 	NEXT
+
+
 
 @ CMOVE ( source dest length -- ) copies a chunk of length bytes from source
 @ address to dest address
@@ -933,12 +938,11 @@ defcode "IMMEDIATE",9,F_IMMED,IMMEDIATE
 @ HIDDEN ( dictionary_address -- ) sets HIDDEN flag of a word
 
 defcode "HIDDEN",6,,HIDDEN
-   pop r1		@ r1 contains the address of the word
-   add r1, r1, #4	@ r1 points to the flag
-   ldrb r2, [r1]	@ load the value of the flag into r2
-   eor r2, r2, #F_HIDDEN	@ r2 = r2 xor FLAG
-   strb r2, [r1]		@ update the new value of the flag
-   NEXT
+	pop  r0
+	ldr r1, [r0, #4]!
+	eor r1, r1, #F_HIDDEN
+	str r1, [r0]
+	NEXT
 
 @ HIDE ( -- ) hide a word
 
@@ -959,18 +963,17 @@ defcode "'",1,,TICK
 @ BRANCH ( -- ) changes IP by offset which is found in the next codeword
 
 defcode "BRANCH",6,,BRANCH
-	ldr r0, [IP]		@ load the address pointed by IP
-	add IP, IP, r0		@ add to this address the number of bytes to jump, into IP
-	NEXT			@ here IP is correctly updated, we can do a NEXT
-
+	ldr r1, [IP]
+	add IP, IP, r1
+	NEXT
 
 @ 0BRANCH ( p -- ) branch if the top of the stack is zero
 
 defcode "0BRANCH",7,,ZBRANCH
-	pop r0			@ pop top value from the data stack
-	cmp r0, #0		@ check if this value is equal to 0
-	beq code_BRANCH		@ if it's equal we jump to the branch code
-	add IP, IP, #4		@ otherwise, we skip to the next instruction
+	pop	r0
+	cmp	r0, #0		 @ if the top of the stack is zero
+	beq	code_BRANCH	 @ then branch
+	add	IP, IP, #4   @ else, skip the offset
 	NEXT
 
 @ LITSTRING ( -- ) as LIT but for strings
@@ -1002,129 +1005,94 @@ defword "QUIT", 4,, QUIT
 	.int BRANCH,-8       @ loop
 
 @ INTERPRET, reads a word from stdin and executes or compiles it
+
 defcode "INTERPRET",9,,INTERPRET
-	@ Fetch the address and length of the current word.
-	bl _WORD
-	mov r4, r0
+    @ No need to backup callee save registers here, since
+    @ we are the top level routine
+
+	mov r8, #0                      @ interpret_is_lit = 0
+
+	bl _WORD                        @ read a word from stdin
+	mov r4, r0                      @ store it in r4,r5
 	mov r5, r1
 
-	@ r7 will store whether the word is a literal, for the moment
-	@ we don't know.
-	mov r7, #0
-
-	@ Search word in the dictionary.
-	bl _FIND
-
-	@ Word was not found in the dictionary.
-	cmp r0, #0
+	bl _FIND                        @ find its dictionary entry
+	cmp r0, #0                      @ if not found go to 1
 	beq 1f
 
-	@ Word was found. r0 is now a pointer to the corresponding
-	@ dictionary entry.
-	@ Save flag/length fields.
-	ldrb r6, [r0, #4]
+    @ Here the entry is found
+	ldrb r6, [r0, #4]               @ read length and flags field
+	bl   _TCFA                      @ find code field address
+	tst  r6, #F_IMMED               @ if the word is immediate
+	bne 4f                          @ branch to 6 (execute)
+	b   2f                          @ otherwise, branch to 2
 
-	@ Convert entry to a codeword pointer.
-	bl _TCFA
-
-	tst r6, #F_IMMED
-	@ IMMEDIATE == 0, we have to execute the word.
-	bne 4f
-	@ IMMEDIATE == 1
-	b 2f
-
-1:	@ The word was not found, is it a number?
-
-	@ Set literal flag.
-	add r7, r7, #1
-
-	@ Prepare call to _NUMBER.
-	mov r0, r4
+1:  @ Not found in dictionary
+   	mov r8, #1                      @ interpret_is_lit = 1
+	mov r0, r4                      @ restore word
 	mov r1, r5
-	bl _NUMBER
+	bl _NUMBER                      @ convert it to number
+	cmp r1, #0                      @ if errors were found
+	bne 6f                          @ then fail
 
-	@ If all characters were parsed, it is a number.
-	cmp r1, #0
-	@ If it is neither a word nor a number, it is an error.
-	bne 6f
+    @ it's a literal
+	mov r6, r0                      @ keep the parsed number if r6
+	ldr r0, =LIT                    @ we will compile a LIT codeword
 
-	@ Save the number.
-	mov r8, r0
-	@ Word is a literal.
-	ldr r0, =LIT
-
-2:	@ Check whether we are in compile or in execute mode.
-	ldr r9, =var_STATE
-	ldr r9, [r9]
-	@ STATE == 0 -> execute, STATE == 1 -> compile
-	cmp r9, #0
-	beq 4f
-
-	@ Compile mode.
-	@ Add word to the definition of the current word.
-	bl _COMMA
-
-	@ If word is not a literal, processing is over.
-	cmp r7, #0 @ interpret_is_lit == 0?
-	beq 3f
-
-	@ Otherwise, LIT is followed by a number (in r8).
-	mov r0, r8
-	bl _COMMA
-3:
-	NEXT
-
-
-4:	@ Execute mode.
-	@ If it is a literal, push it on the data stack.
-	cmp r7, #0
-	bne 5f
-
-	@ Word is not a literal,, execute it.
-	ldr r1, [r0]
-	bx r1
-
-5:	@ Executing a literal is pushing it on the data stack.
-	push r8
-	NEXT
-
-6:	@ Error handling.
-
-	@ Print error message.
-	mov r0, #stderr
-	ldr r1, =errmsg
-	mov r2, #errmsgend-errmsg
-	@ Call to write.
-	mov r7, #__NR_write
-	swi 0
-
-	@ Display the context of the error.
-	mov r0, #stderr
-	@ Compute the length of the previous buffer (currkey).
-	ldr r1, =currkey
+2:  @ Compiling or Executing
+	ldr r1, =var_STATE              @ Are we compiling or executing ?
 	ldr r1, [r1]
-	ldr r2, =buffer
-	sub r2, r1, r2
-	@ The error context must not be larger than 40 characters.
-	cmp r2, #40
-	movgt r2, #40
-	@ Pointer to the first character of the error context.
-	sub r1, r1, r2
-	mov r7, #__NR_write
+	cmp r1, #0
+	beq 4f                          @ Go to 4 if in interpret mode
+
+    @ Here in compile mode
+
+	bl _COMMA                       @ Call comma to compile the codeword
+	cmp r8,#1                       @ If it's a literal, we have to compile
+	moveq r0,r6                     @ the integer ...
+	bleq _COMMA                     @ .. too
+	NEXT
+
+4:  @ Executing
+	cmp r8,#1                       @ if it's a literal, branch to 5
+	beq 5f
+
+	                                @ not a literal, execute now
+	ldr r1, [r0]                    @ (it's important here that
+	bx r1                           @  IP address in r0, since DOCOL
+                                    @  assummes it)
+
+5:  @ Push literal on the stack
+	push r6
+	NEXT
+
+6:  @ Parse error
+	mov r0, #stderr                 @ Write an error message
+	ldr r1, =errmsg
+        mov r2, #(errmsgend-errmsg)
+	ldr r7, =__NR_write
 	swi 0
 
-	@ Newline.
-	mov r0, #stderr
-	ldr r1, =errmsgnl
-	mov r2, #1
-	mov r7, #__NR_write
+	mov r0, #stderr                 @ with the word that could not be parsed
+	mov r1, r4
+	mov r2, r5
+	ldr r7, =__NR_write
 	swi 0
+
+	mov r0, #stderr
+	ldr r1, =errmsg2
+        mov r2, #(errmsg2end-errmsg2)
+	ldr r7, =__NR_write
+	swi 0
+
 	NEXT
 
 	.section .rodata
-errmsg: .ascii "PARSE ERROR: "
+errmsg: .ascii "PARSE ERROR<"
 errmsgend:
-errmsgnl: .ascii "\n"
+
+errmsg2: .ascii ">\n"
+errmsg2end:
 
 @ CHAR ( -- c ) put the ASCII code of the first character of the next word
 @ on the stack
