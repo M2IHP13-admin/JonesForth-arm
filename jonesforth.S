@@ -806,59 +806,89 @@ word_buffer:
 defcode "NUMBER",6,,NUMBER
 	pop r1
 	pop r0
-	bl	_NUMBER
+	bl _NUMBER
 	push r0
 	push r1
 	NEXT
 
 _NUMBER:
-	stmfd	sp!, {r5,r6,r8,r9}
+	stmfd sp!, {r4-r6, lr}
 
-	mov	r2, r0		     @ address
-	mov	r0, #0		     @ number
-	cmp	r1, #0		     @ length <= 0?
-	ble	5f		         @ really an error, but returns 0 anyway
+	@ Save address of the string.
+	mov r2, r0
 
-	ldr	r5, =var_BASE
-	ldr	r5, [r5]	     @ get BASE
-	ldrb	r6, [r2], #1 @ get character and increment address
-	mov	r9, #0		     @ set negative flag false
-	cmp	r6, #'-'	     @ leading '-'?
-	bne	2f		         @ nope, try to parse as digit
+	@ r0 will store the result after conversion.
+	mov r0, #0
 
-	mov	r9, #1		     @ set negative flag true
-	subs	r1, r1, #1	 @ decrement length
-	bpl	1f		         @ >0 so keep going
+	@ Check if length is positive, otherwise this is an error.
+	cmp r1, #0
+	ble 5f
 
-	mov	r1, #1		     @ just a sign, no digits, signal an error
-	b	5f		         @ error!
+	@ Load current base.
+	ldr r3, =var_BASE
+	ldr r3, [r3]
+
+	@ Load first character and increment pointer.
+	ldrb r4, [r2], #1
+
+	@ Check trailing '-'.
+	mov r5, #0
+	cmp r4, #45 @ 45 = '-' en ASCII
+	@ Number is positive.
+	bne 2f
+	@ Number is negative.
+	mov r5, #1
+	sub r1, r1, #1
+
+	@ Check if we have more than just '-' in the string.
+	cmp r1, #0
+	@ No, proceed with conversion.
+	bgt 1f
+	@ Error.
+	mov r1, #1
+	b 5f
 1:
-	mul	r8, r0, r5	     @ number = number * BASE
-	mov	r0, r8		     @ (need to use another register for mul to avoid
-                         @  warning)
-	ldrb	r6, [r2], #1 @ get character and increment address
-2:
-	subs	r6, r6, #'0' @ try lower digit bound
-	bmi	4f		         @ nope, < '0' so we're done
-	cmp	r6, #10		     @ try upper digit bound
-	blt	3f		         @ yes, we got one!
-	subs	r6, r6, #17	 @ try lower char bound (17 is 'A'-'0')
-	bmi	4f		         @ nope, < 'A' so we're done
-	add	r6, r6, #10	     @ adjust for first 10 digit values before 'A'
-3:
-	cmp	r6, r5		     @ >= BASE?
-	bge	4f		         @ yep, we're done
+	@ number *= BASE
+	@ Arithmetic shift right.
+	@ On ARM we need to use an additional register for MUL.
+	mul r6, r0, r3
+	mov r0, r6
 
-	                     @ finally, add new digit to number and loop
-	add	r0, r6
-	subs	r1, r1, #1
-	bne	1b
+	@ Load the next character.
+	ldrb r4, [r2], #1
+2:
+	@ Convert the character into a digit.
+	sub r4, r4, #48 @ r4 = r4 - '0'
+	cmp r4, #0
+	blt 4f @ End, < 0
+	cmp r4, #9
+	ble 3f @ chiffre compris entre 0 et 9
+
+	@ Test if hexadecimal character.
+	sub r4, r4, #17 @ 17 = 'A' - '0'
+	cmp r4, #0
+	blt 4f @ End, < 'A'
+	add r4, r4, #10
+3:
+	@ Compare to the current base.
+	cmp r4, r3
+	bge 4f @ End, > BASE
+
+	@ Everything is fine.
+	@ Add the digit to the result.
+	add r0, r0, r4
+	sub r1, r1, #1
+
+	@ Continue processing while there are still characters to read.
+	cmp r1, #0
+	bgt 1b
 4:
-	cmp	r9, #1		     @ check negative flag
-	rsbeq	r0, r0, #0	 @ yes, negate (r0 = 0 - r0)
+	@ Negate result if we had a '-'.
+	cmp r5, #1
+	rsbeq r0, r0, #0
 5:
-	ldmfd	sp!, {r5,r6,r8,r9}
-	bx	lr
+	@ Back to the caller.
+	ldmfd sp!, {r4-r6, pc}
 
 
 @ FIND ( addr length -- dictionary_address )
