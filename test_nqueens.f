@@ -1,3 +1,6 @@
+\ Adapted from the forth version at 
+\ http://rosettacode.org/wiki/N-queens_problem
+
 VARIABLE SOLUTIONS
 VARIABLE NODES
  
