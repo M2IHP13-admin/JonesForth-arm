@@ -1,4 +1,4 @@
-# Jonesforth-ARM V 1.0 released Feb 20, 2013
+# Jonesforth-ARM V 1.0
 
 An ARM port of X86 JonesForth by Richard W.M. Jones <rich@annexia.org>
 at <http://annexia.org/forth>.
