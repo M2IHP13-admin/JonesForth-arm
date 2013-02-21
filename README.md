@@ -1,4 +1,4 @@
-# Jonesforth-ARM V 1.0
+# Jonesforth-ARM
 
 An ARM port of X86 JonesForth by Richard W.M. Jones <rich@annexia.org>
 at <http://annexia.org/forth>.
